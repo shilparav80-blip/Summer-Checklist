@@ -534,6 +534,104 @@ def require_player_unlocked(request: Request, player_slug: str) -> None:
         raise HTTPException(status_code=403, detail="Player profile is locked")
 
 
+def admin_unlocked(request: Request) -> bool:
+    return bool(request.session.get("admin_unlocked"))
+
+
+def require_admin_unlocked(request: Request) -> None:
+    require_auth(request)
+    if not admin_unlocked(request):
+        raise HTTPException(status_code=403, detail="Parent admin is locked")
+
+
+def clean_custom_tasks(tasks: list[dict]) -> list[dict]:
+    if not isinstance(tasks, list):
+        return []
+    cleaned: list[dict] = []
+    for task in tasks[:40]:
+        if not isinstance(task, dict):
+            continue
+        name = str(task.get("name", "")).strip()
+        if not name:
+            continue
+        badge = str(task.get("badge", "")).strip().upper()[:12] or name[:8].upper()
+        icon = str(task.get("icon", "lotus")).strip() or "lotus"
+        frequency = str(task.get("frequency", "daily")).strip().lower()
+        if frequency not in {"daily", "weekly"}:
+            frequency = "daily"
+        try:
+            stars = int(task.get("stars", 1))
+        except (TypeError, ValueError):
+            stars = 1
+        cleaned.append({
+            "name": name,
+            "badge": badge,
+            "icon": icon,
+            "frequency": frequency,
+            "stars": max(1, min(stars, 25)),
+        })
+    return cleaned
+
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_page(request: Request):
+    if not request.session.get("authenticated"):
+        return RedirectResponse("/login", status_code=302)
+    if not admin_unlocked(request):
+        return render_template(request, "admin_login.html", {"error": None})
+    return render_template(request, "admin_tasks.html", {
+        "players_js": json.dumps(PLAYERS),
+        "default_tasks_js": json.dumps(CHECKLIST_ACTIVITIES),
+    })
+
+
+@app.post("/admin/unlock", response_class=HTMLResponse)
+async def unlock_admin(request: Request, password: str = Form(...)):
+    require_auth(request)
+    if hmac.compare_digest(password.strip(), DASHBOARD_PASSWORD):
+        request.session["admin_unlocked"] = True
+        return RedirectResponse("/admin", status_code=302)
+    return render_template(request, "admin_login.html", {
+        "error": "Incorrect parent password",
+    }, status_code=401)
+
+
+@app.get("/api/admin/players/{player_slug}/tasks")
+async def api_admin_player_tasks(player_slug: str, request: Request):
+    require_admin_unlocked(request)
+    player_slug = player_slug.lower()
+    player_name = PLAYERS.get(player_slug)
+    if not player_name:
+        raise HTTPException(status_code=404, detail="Player not found")
+    profile = await load_profile(player_slug)
+    return JSONResponse({
+        "player_slug": player_slug,
+        "player_name": player_name,
+        "tasks": profile["state"].get("tasks") or CHECKLIST_ACTIVITIES,
+    })
+
+
+@app.post("/api/admin/players/{player_slug}/tasks")
+async def api_admin_save_player_tasks(player_slug: str, request: Request):
+    require_admin_unlocked(request)
+    player_slug = player_slug.lower()
+    if player_slug not in PLAYERS:
+        raise HTTPException(status_code=404, detail="Player not found")
+    payload = await request.json()
+    tasks = clean_custom_tasks(payload.get("tasks") or [])
+    if not tasks:
+        raise HTTPException(status_code=400, detail="Add at least one task")
+    profile = await load_profile(player_slug)
+    state = profile["state"]
+    state["tasks"] = tasks
+    saved = await save_profile(player_slug, state)
+    return JSONResponse({
+        "ok": True,
+        "tasks": saved["state"].get("tasks") or CHECKLIST_ACTIVITIES,
+        "total_stars": saved["total_stars"],
+    })
+
+
 @app.get("/checklist", response_class=HTMLResponse)
 async def checklist_page(request: Request):
     return await checklist_player_page(request, "aretha")

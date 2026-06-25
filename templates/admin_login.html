@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block content %}
+<main class="min-h-screen flex items-center justify-center px-4 bg-[#3c201d]">
+    <section class="w-full max-w-md rounded-2xl border border-white/15 bg-[#fff8e7] p-8 shadow-2xl">
+        <div class="mb-8 text-center">
+            <div class="mb-3 text-5xl">&#9881;</div>
+            <h1 class="pacifico mb-2 text-4xl text-[#783524]">Parent Settings</h1>
+            <p class="text-sm text-gray-500">Unlock to customize each child&apos;s quest list.</p>
+        </div>
+
+        {% if error %}
+        <div class="mb-5 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-center text-sm text-red-500">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <form method="post" action="/admin/unlock">
+            <label class="mb-2 block text-xs font-semibold uppercase tracking-wider text-gray-500">
+                Parent password
+            </label>
+            <input
+                type="password"
+                name="password"
+                placeholder="Enter parent password"
+                required
+                autofocus
+                class="mb-5 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-orange-300"
+            >
+            <button
+                type="submit"
+                class="w-full rounded-xl bg-[#c35a32] py-3 text-sm font-semibold text-white shadow-md transition hover:bg-[#a94727]"
+            >
+                Open Task Editor
+            </button>
+        </form>
+
+        <a href="/" class="mt-5 block text-center text-sm font-semibold text-[#783524] hover:text-[#c35a32]">
+            Back to players
+        </a>
+    </section>
+</main>
+{% endblock %}

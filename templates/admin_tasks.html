@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block content %}
+<main class="min-h-screen bg-[#3c201d] px-4 py-6 text-[#2f211b]">
+    <section class="mx-auto max-w-5xl">
+        <header class="mb-5 flex flex-col gap-4 rounded-2xl border border-white/15 bg-[#fff8e7] p-5 shadow-xl sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <p class="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-[#c35a32]">Parent mode</p>
+                <h1 class="pacifico text-4xl text-[#783524]">Quest Task Editor</h1>
+                <p class="mt-2 text-sm text-gray-500">Customize chores and rewards for each child.</p>
+            </div>
+            <a href="/" class="inline-flex items-center justify-center rounded-xl border border-[#e4b99e] px-4 py-2 text-sm font-semibold text-[#783524] hover:bg-[#fff1d1]">
+                Players
+            </a>
+        </header>
+
+        <div class="grid gap-5 lg:grid-cols-[220px_1fr]">
+            <aside class="rounded-2xl border border-white/15 bg-[#fff8e7] p-4 shadow-xl">
+                <h2 class="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">Children</h2>
+                <div id="playerTabs" class="grid gap-2"></div>
+            </aside>
+
+            <section class="rounded-2xl border border-white/15 bg-[#fff8e7] p-4 shadow-xl">
+                <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h2 id="editorTitle" class="text-2xl font-bold text-[#783524]">Tasks</h2>
+                        <p id="saveStatus" class="mt-1 text-sm text-gray-500">Choose a child to edit.</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button id="addTask" type="button" class="rounded-xl bg-[#2f7d5c] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#246548]">
+                            Add Task
+                        </button>
+                        <button id="resetTasks" type="button" class="rounded-xl border border-[#e4b99e] px-4 py-2 text-sm font-semibold text-[#783524] hover:bg-[#fff1d1]">
+                            Reset Defaults
+                        </button>
+                        <button id="saveTasks" type="button" class="rounded-xl bg-[#c35a32] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#a94727]">
+                            Save
+                        </button>
+                    </div>
+                </div>
+
+                <div class="hidden border-b border-[#ead4bc] pb-2 text-xs font-bold uppercase tracking-wider text-gray-500 md:grid md:grid-cols-[1.45fr_0.65fr_0.75fr_0.75fr_0.5fr_42px] md:gap-2">
+                    <div>Task</div>
+                    <div>Badge</div>
+                    <div>Icon</div>
+                    <div>When</div>
+                    <div>Stars</div>
+                    <div></div>
+                </div>
+                <div id="taskRows" class="mt-3 grid gap-3"></div>
+            </section>
+        </div>
+    </section>
+</main>
+
+<script>
+    const players = {{ players_js | safe }};
+    const defaultTasks = {{ default_tasks_js | safe }};
+    const iconOptions = ["book", "diya", "ghungroo", "lotus", "mandala", "om", "raga", "rangoli", "tabla", "thali"];
+    let activeSlug = Object.keys(players)[0];
+    let currentTasks = [];
+
+    const playerTabs = document.getElementById("playerTabs");
+    const taskRows = document.getElementById("taskRows");
+    const editorTitle = document.getElementById("editorTitle");
+    const saveStatus = document.getElementById("saveStatus");
+
+    function setStatus(message, tone = "muted") {
+        saveStatus.textContent = message;
+        saveStatus.className = tone === "error" ? "mt-1 text-sm text-red-600" : "mt-1 text-sm text-gray-500";
+    }
+
+    function renderPlayers() {
+        playerTabs.innerHTML = "";
+        Object.entries(players).forEach(([slug, name]) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.textContent = name;
+            button.className = slug === activeSlug
+                ? "rounded-xl bg-[#c35a32] px-4 py-3 text-left text-sm font-bold text-white shadow-sm"
+                : "rounded-xl border border-[#ead4bc] px-4 py-3 text-left text-sm font-bold text-[#783524] hover:bg-[#fff1d1]";
+            button.addEventListener("click", () => {
+                activeSlug = slug;
+                renderPlayers();
+                loadTasks();
+            });
+            playerTabs.appendChild(button);
+        });
+    }
+
+    function taskRow(task, index) {
+        const wrapper = document.createElement("div");
+        wrapper.className = "grid gap-2 rounded-xl border border-[#ead4bc] bg-white/65 p-3 md:grid-cols-[1.45fr_0.65fr_0.75fr_0.75fr_0.5fr_42px] md:items-center";
+        wrapper.innerHTML = `
+            <input aria-label="Task name" value="${escapeAttr(task.name || "")}" class="rounded-lg border border-[#ead4bc] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300">
+            <input aria-label="Badge" value="${escapeAttr(task.badge || "")}" maxlength="12" class="rounded-lg border border-[#ead4bc] px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-orange-300">
+            <select aria-label="Icon" class="rounded-lg border border-[#ead4bc] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300">
+                ${iconOptions.map(icon => `<option value="${icon}" ${icon === task.icon ? "selected" : ""}>${icon}</option>`).join("")}
+            </select>
+            <select aria-label="Frequency" class="rounded-lg border border-[#ead4bc] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300">
+                <option value="daily" ${task.frequency === "daily" ? "selected" : ""}>Daily</option>
+                <option value="weekly" ${task.frequency === "weekly" ? "selected" : ""}>Weekly</option>
+            </select>
+            <input aria-label="Stars" type="number" min="1" max="25" value="${Number(task.stars || 1)}" class="rounded-lg border border-[#ead4bc] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300">
+            <button type="button" aria-label="Remove task" class="h-10 rounded-lg border border-red-200 text-lg font-bold text-red-500 hover:bg-red-50">&times;</button>
+        `;
+        const [nameInput, badgeInput, iconSelect, frequencySelect, starsInput, removeButton] = Array.from(wrapper.children);
+        nameInput.addEventListener("input", () => currentTasks[index].name = nameInput.value);
+        badgeInput.addEventListener("input", () => currentTasks[index].badge = badgeInput.value.toUpperCase());
+        iconSelect.addEventListener("change", () => currentTasks[index].icon = iconSelect.value);
+        frequencySelect.addEventListener("change", () => currentTasks[index].frequency = frequencySelect.value);
+        starsInput.addEventListener("input", () => currentTasks[index].stars = starsInput.value);
+        removeButton.addEventListener("click", () => {
+            currentTasks.splice(index, 1);
+            renderTasks();
+        });
+        return wrapper;
+    }
+
+    function renderTasks() {
+        editorTitle.textContent = `${players[activeSlug]}'s tasks`;
+        taskRows.innerHTML = "";
+        currentTasks.forEach((task, index) => taskRows.appendChild(taskRow(task, index)));
+    }
+
+    function escapeAttr(value) {
+        return String(value).replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+    }
+
+    async function loadTasks() {
+        setStatus("Loading tasks...");
+        const response = await fetch(`/api/admin/players/${activeSlug}/tasks`);
+        if (!response.ok) {
+            setStatus("Could not load tasks. Please try again.", "error");
+            return;
+        }
+        const data = await response.json();
+        currentTasks = data.tasks.map(task => ({ ...task }));
+        renderTasks();
+        setStatus(`Editing ${data.player_name}'s quest list.`);
+    }
+
+    async function saveTasks() {
+        const tasks = currentTasks
+            .map(task => ({
+                name: String(task.name || "").trim(),
+                badge: String(task.badge || "").trim().toUpperCase(),
+                icon: task.icon || "lotus",
+                frequency: task.frequency || "daily",
+                stars: Number(task.stars || 1),
+            }))
+            .filter(task => task.name);
+        if (!tasks.length) {
+            setStatus("Add at least one task before saving.", "error");
+            return;
+        }
+        setStatus("Saving...");
+        const response = await fetch(`/api/admin/players/${activeSlug}/tasks`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tasks }),
+        });
+        if (!response.ok) {
+            setStatus("Could not save tasks. Please try again.", "error");
+            return;
+        }
+        const data = await response.json();
+        currentTasks = data.tasks.map(task => ({ ...task }));
+        renderTasks();
+        setStatus("Saved. This child will see the new list on their quest page.");
+    }
+
+    document.getElementById("addTask").addEventListener("click", () => {
+        currentTasks.push({ name: "", badge: "", icon: "lotus", frequency: "daily", stars: 2 });
+        renderTasks();
+    });
+
+    document.getElementById("resetTasks").addEventListener("click", () => {
+        currentTasks = defaultTasks.map(task => ({ ...task }));
+        renderTasks();
+        setStatus("Defaults are ready. Press Save to apply them.");
+    });
+
+    document.getElementById("saveTasks").addEventListener("click", saveTasks);
+
+    renderPlayers();
+    loadTasks();
+</script>
+{% endblock %}
