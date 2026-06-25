@@ -26,20 +26,28 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
 _BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
-# Vercel vendors its own Jinja2 (via _vendor/) regardless of requirements.txt.
-# Bug 1: env.globals dict used as LRU cache key → unhashable. Fix: disable cache.
-templates.env.cache = None
-# Bug 2: vendored _load_template passes (globals_dict, name_str) to loader.load in the
-# wrong order — standard signature is (name_str, globals_dict). Fix: patch to swap back.
-import jinja2.loaders as _jinja2_loaders
-_orig_loader_load = _jinja2_loaders.BaseLoader.load
 
-def _patched_loader_load(self, environment, name, globals=None):
-    if isinstance(name, dict) and isinstance(globals, str):
-        name, globals = globals, name
-    return _orig_loader_load(self, environment, name, globals)
+# Vercel vendors its own Jinja2 (via _vendor/) regardless of requirements.txt, and
+# that version has multiple argument-order bugs in get_template → _load_template →
+# loader.load.  The only reliable fix is to replace env.get_template entirely with
+# an implementation that goes straight to loader.get_source → env.compile → from_code,
+# bypassing _load_template and loader.load altogether.
+import types as _types
+import jinja2 as _jinja2
 
-_jinja2_loaders.BaseLoader.load = _patched_loader_load
+def _safe_get_template(env_self, name, parent=None, globals=None):
+    if isinstance(name, _jinja2.Template):
+        return name
+    if parent is not None:
+        name = env_self.join_path(name, parent)
+    source, filename, _ = env_self.loader.get_source(env_self, name)
+    code = env_self.compile(source, name, filename)
+    return env_self.template_class.from_code(
+        env_self, code, env_self.make_globals(globals), None
+    )
+
+templates.env.get_template = _types.MethodType(_safe_get_template, templates.env)
+templates.env.cache = None  # disable LRU cache (unhashable-globals bug, belt+suspenders)
 
 # Vercel's project root is read-only; /tmp is writable (ephemeral between cold starts).
 # Locally we keep data/ as before.
