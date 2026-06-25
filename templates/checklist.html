@@ -27,6 +27,10 @@
     }
     .xp-bar { background: rgba(120, 53, 36, 0.14); }
     .xp-fill { transition: width 0.45s ease; }
+    .calendar-day { transition: background 0.12s ease, color 0.12s ease, transform 0.12s ease; }
+    .calendar-day:hover { transform: translateY(-1px); }
+    .calendar-day.selected { background: #f97316; color: #fff; }
+    .calendar-day.has-plan:not(.selected) { background: #ffedd5; color: #9a3412; font-weight: 700; }
     .star-pop { animation: starPop 0.28s ease; }
     @keyframes starPop {
         0% { transform: scale(0.86); }
@@ -143,6 +147,43 @@
         <div id="penalty-list" class="divide-y divide-orange-50"></div>
     </section>
 
+    <section class="bg-white rounded-2xl border border-orange-100 shadow-md overflow-hidden mb-6">
+        <div class="px-5 py-4 border-b border-orange-100 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+                <h2 class="font-bold text-gray-700">Quest calendar</h2>
+                <p class="text-sm text-gray-400">Pick a date, schedule quests, then add them to Google Calendar.</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="changeScheduleMonth(-1)" class="rounded-xl border border-orange-200 bg-white px-3 py-2 text-sm font-semibold text-orange-600 hover:bg-orange-50">Prev</button>
+                <span id="schedule-month-label" class="min-w-32 text-center text-sm font-bold text-[#783524]">Month</span>
+                <button type="button" onclick="changeScheduleMonth(1)" class="rounded-xl border border-orange-200 bg-white px-3 py-2 text-sm font-semibold text-orange-600 hover:bg-orange-50">Next</button>
+            </div>
+        </div>
+        <div class="grid lg:grid-cols-[18rem_1fr] gap-0 lg:divide-x divide-orange-100">
+            <div class="p-5">
+                <div class="grid grid-cols-7 gap-1 mb-2">
+                    <div class="text-center text-[11px] font-bold text-gray-400">Su</div>
+                    <div class="text-center text-[11px] font-bold text-gray-400">Mo</div>
+                    <div class="text-center text-[11px] font-bold text-gray-400">Tu</div>
+                    <div class="text-center text-[11px] font-bold text-gray-400">We</div>
+                    <div class="text-center text-[11px] font-bold text-gray-400">Th</div>
+                    <div class="text-center text-[11px] font-bold text-gray-400">Fr</div>
+                    <div class="text-center text-[11px] font-bold text-gray-400">Sa</div>
+                </div>
+                <div id="schedule-calendar" class="grid grid-cols-7 gap-1"></div>
+            </div>
+            <div class="p-5">
+                <p class="text-xs font-bold uppercase tracking-wider text-orange-400">Selected day</p>
+                <h3 id="schedule-date-label" class="pacifico text-3xl text-[#783524] mb-4">Today</h3>
+                <div class="flex flex-col sm:flex-row gap-3 mb-5">
+                    <select id="schedule-task-select" class="flex-1 rounded-xl border border-orange-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-300"></select>
+                    <button type="button" onclick="addScheduledQuest()" class="rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-orange-600">Schedule quest</button>
+                </div>
+                <div id="scheduled-list" class="space-y-2"></div>
+            </div>
+        </div>
+    </section>
+
     <section id="celebration" class="hidden rounded-2xl bg-gradient-to-r from-orange-400 to-amber-400 p-6 text-center text-white shadow-lg">
         <div class="text-4xl mb-2">&#9733; &#9733; &#9733;</div>
         <h2 class="pacifico text-4xl mb-1">Quest complete!</h2>
@@ -155,11 +196,14 @@ const DEFAULT_TASKS = JSON.parse(document.getElementById('task-data').textConten
 const TASK_KEY = 'daily_chores_tasks_v1';
 const DONE_KEY = 'daily_chores_done_v1';
 const PENALTY_KEY = 'daily_chores_penalties_v1';
+const SCHEDULE_KEY = 'daily_chores_schedule_v1';
 const PENALTIES = [
     { name: 'iPad watched for more than 1 hour', badge: 'IPAD', stars: 5 },
     { name: 'TV watched for more than 1 hour', badge: 'TV', stars: 5 }
 ];
 let selectedDate = new Date();
+let selectedScheduleDate = new Date();
+let visibleScheduleMonth = new Date(selectedScheduleDate.getFullYear(), selectedScheduleDate.getMonth(), 1);
 
 function esc(value) {
     return String(value ?? '')
@@ -241,6 +285,10 @@ function getDone() {
 
 function getPenalties() {
     return loadJSON(PENALTY_KEY, {});
+}
+
+function getSchedule() {
+    return loadJSON(SCHEDULE_KEY, {});
 }
 
 function taskDoneKey(task, date) {
@@ -329,6 +377,121 @@ function penaltyRow(penalty, marked) {
         </span>
         <span class="text-red-500 font-bold">-${penalty.stars} &#9733;</span>
     </button>`;
+}
+
+function addScheduledQuest() {
+    const select = document.getElementById('schedule-task-select');
+    const name = select.value;
+    if (!name) return;
+    const schedule = getSchedule();
+    const key = dateKey(selectedScheduleDate);
+    if (!schedule[key]) schedule[key] = [];
+    if (!schedule[key].includes(name)) schedule[key].push(name);
+    saveJSON(SCHEDULE_KEY, schedule);
+    renderSchedule();
+}
+
+function removeScheduledQuest(name) {
+    const schedule = getSchedule();
+    const key = dateKey(selectedScheduleDate);
+    if (!schedule[key]) return;
+    schedule[key] = schedule[key].filter(item => item !== name);
+    if (!schedule[key].length) delete schedule[key];
+    saveJSON(SCHEDULE_KEY, schedule);
+    renderSchedule();
+}
+
+function changeScheduleMonth(delta) {
+    visibleScheduleMonth = new Date(
+        visibleScheduleMonth.getFullYear(),
+        visibleScheduleMonth.getMonth() + delta,
+        1
+    );
+    renderSchedule();
+}
+
+function selectScheduleDate(key) {
+    const [year, month, day] = key.split('-').map(Number);
+    selectedScheduleDate = new Date(year, month - 1, day);
+    visibleScheduleMonth = new Date(year, month - 1, 1);
+    renderSchedule();
+}
+
+function googleCalendarUrl(name, date) {
+    const start = dateKey(date).replaceAll('-', '');
+    const end = dateKey(addDays(date, 1)).replaceAll('-', '');
+    return 'https://calendar.google.com/calendar/render?action=TEMPLATE'
+        + `&text=${encodeURIComponent(name)}`
+        + `&dates=${start}/${end}`
+        + `&details=${encodeURIComponent('Scheduled from Star Quest')}`;
+}
+
+function renderScheduleTaskOptions(tasks) {
+    const select = document.getElementById('schedule-task-select');
+    if (!select) return;
+    select.innerHTML = tasks.map(task =>
+        `<option value="${esc(task.name)}">${esc(task.name)} (${Number(task.stars || 1)} stars)</option>`
+    ).join('');
+}
+
+function renderScheduleCalendar(schedule) {
+    const calendar = document.getElementById('schedule-calendar');
+    const label = document.getElementById('schedule-month-label');
+    if (!calendar || !label) return;
+
+    const year = visibleScheduleMonth.getFullYear();
+    const month = visibleScheduleMonth.getMonth();
+    label.textContent = visibleScheduleMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < firstDay; i++) cells.push('<div class="aspect-square"></div>');
+    for (let day = 1; day <= daysInMonth; day++) {
+        const current = new Date(year, month, day);
+        const key = dateKey(current);
+        const selected = key === dateKey(selectedScheduleDate);
+        const hasPlan = !!(schedule[key] && schedule[key].length);
+        cells.push(`<button type="button"
+            onclick="selectScheduleDate('${key}')"
+            class="calendar-day aspect-square rounded-lg text-sm flex items-center justify-center ${selected ? 'selected' : ''} ${hasPlan ? 'has-plan' : 'text-gray-700'}">${day}</button>`);
+    }
+    calendar.innerHTML = cells.join('');
+}
+
+function renderScheduledList(schedule) {
+    const label = document.getElementById('schedule-date-label');
+    const list = document.getElementById('scheduled-list');
+    if (!label || !list) return;
+    const key = dateKey(selectedScheduleDate);
+    const items = schedule[key] || [];
+    label.textContent = selectedScheduleDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+
+    if (!items.length) {
+        list.innerHTML = '<div class="rounded-xl border border-dashed border-orange-200 bg-orange-50/50 px-4 py-5 text-center text-sm text-gray-400">No quests scheduled for this day yet.</div>';
+        return;
+    }
+
+    list.innerHTML = items.map(name => {
+        const gcal = googleCalendarUrl(name, selectedScheduleDate);
+        return `<div class="rounded-xl border border-orange-100 bg-orange-50/60 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+                <p class="font-semibold text-gray-800">${esc(name)}</p>
+                <p class="text-xs text-gray-400">Scheduled quest</p>
+            </div>
+            <div class="flex gap-2">
+                <a href="${gcal}" target="_blank" rel="noopener noreferrer" class="rounded-lg bg-[#783524] px-3 py-2 text-xs font-bold text-white hover:bg-[#5f2f28]">Google Calendar</a>
+                <button type="button" data-name="${esc(name)}" onclick="removeScheduledQuest(this.dataset.name)" class="rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-500 hover:bg-red-50">Remove</button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function renderSchedule(tasks = getTasks()) {
+    const schedule = getSchedule();
+    renderScheduleTaskOptions(tasks);
+    renderScheduleCalendar(schedule);
+    renderScheduledList(schedule);
 }
 function earnedStarsForDate(date, done, tasks) {
     return tasks.reduce((sum, task) => isDone(task, date, done) ? sum + Number(task.stars || 1) : sum, 0);
@@ -428,6 +591,7 @@ function render() {
     const currentStreak = streak(done, tasks);
     document.getElementById('streak-text').textContent = `${currentStreak} day${currentStreak === 1 ? '' : 's'} combo`;
     document.getElementById('celebration').classList.toggle('hidden', !(daily.length > 0 && dailyDone === daily.length));
+    renderSchedule(tasks);
 
     for (const id of ['today-stars', 'week-stars', 'total-stars']) {
         const el = document.getElementById(id);
