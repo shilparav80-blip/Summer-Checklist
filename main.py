@@ -217,5 +217,5 @@ async def checklist_page(request: Request):
         "request": request,
         "months": months,
         "activities": CHECKLIST_ACTIVITIES,
-        "activity_names_js": json.dumps([a["name"] for a in CHECKLIST_ACTIVITIES]),
+        "activities_js": json.dumps(CHECKLIST_ACTIVITIES),
     })
