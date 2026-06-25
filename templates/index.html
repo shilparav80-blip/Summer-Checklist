@@ -1,14 +1,17 @@
 {% extends "base.html" %}
 
 {% block content %}
-<main class="min-h-screen flex items-center justify-center px-4 bg-[#fff8e7]">
-    <section class="text-center">
-        <div class="text-5xl mb-4">☀️</div>
-        <h1 class="pacifico text-4xl text-orange-500 mb-2">Summer Checklist</h1>
-        <p class="text-gray-500 mb-5">Opening your planner...</p>
-        <a href="/checklist" class="inline-flex items-center justify-center rounded-xl bg-orange-500 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-orange-600">
-            Go to Checklist
-        </a>
+<main class="min-h-screen flex items-center justify-center px-4 bg-[#5f2f28]">
+    <section class="text-center bg-[#fff8e7] rounded-2xl border border-white/70 shadow-xl p-8 max-w-md w-full">
+        <div class="text-5xl mb-4">&#9733;</div>
+        <h1 class="pacifico text-4xl text-[#783524] mb-2">Star Quest</h1>
+        <p class="text-gray-500 mb-5">Choose a player&apos;s quest board.</p>
+        <div class="grid grid-cols-2 gap-3">
+            <a href="/checklist/aretha" class="rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-orange-600">Aretha</a>
+            <a href="/checklist/aarav" class="rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-orange-600">Aarav</a>
+            <a href="/checklist/arjun" class="rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-orange-600">Arjun</a>
+            <a href="/checklist/adi" class="rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-orange-600">Adi</a>
+        </div>
     </section>
 </main>
 {% endblock %}

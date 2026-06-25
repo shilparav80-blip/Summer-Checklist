@@ -253,7 +253,7 @@ async def app_icon():
 async def index(request: Request):
     if not request.session.get("authenticated"):
         return RedirectResponse("/login", status_code=302)
-    return RedirectResponse("/checklist", status_code=302)
+    return render_template(request, "index.html", {})
     activities = load_activities()
     hero_image = await get_hero_image()
     completed = sum(1 for a in activities if a["completed"])
@@ -330,11 +330,26 @@ _MONTHS = [
     {"num": 8, "name": "August", "gradient": "from-teal-400 to-cyan-400"},
 ]
 
+PLAYERS = {
+    "aretha": "Aretha",
+    "aarav": "Aarav",
+    "arjun": "Arjun",
+    "adi": "Adi",
+}
+
 
 @app.get("/checklist", response_class=HTMLResponse)
 async def checklist_page(request: Request):
+    return await checklist_player_page(request, "aretha")
+
+
+@app.get("/checklist/{player_slug}", response_class=HTMLResponse)
+async def checklist_player_page(request: Request, player_slug: str):
     if not request.session.get("authenticated"):
         return RedirectResponse("/login", status_code=302)
+    player_name = PLAYERS.get(player_slug.lower())
+    if not player_name:
+        return RedirectResponse("/checklist/aretha", status_code=302)
     months = [
         {**m, "weeks": _cal.monthdayscalendar(2026, m["num"])}
         for m in _MONTHS
@@ -343,6 +358,9 @@ async def checklist_page(request: Request):
         "months": months,
         "activities": CHECKLIST_ACTIVITIES,
         "activities_js": json.dumps(CHECKLIST_ACTIVITIES),
+        "player_name": player_name,
+        "player_slug": player_slug.lower(),
+        "players_js": json.dumps(PLAYERS),
     })
 
 

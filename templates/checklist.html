@@ -42,6 +42,13 @@
 
 {% block content %}
 <script type="application/json" id="task-data">{{ activities_js | safe }}</script>
+<script type="application/json" id="player-data">{{ players_js | safe }}</script>
+<script>
+    window.STAR_QUEST_PLAYER = {
+        name: {{ player_name | tojson }},
+        slug: {{ player_slug | tojson }}
+    };
+</script>
 
 <nav class="sticky top-0 z-30 bg-[#fff8e7]/95 backdrop-blur-sm border-b border-white/40 px-5 py-3 flex items-center justify-between shadow-sm">
     <a href="/" class="text-[#9f4d35] hover:text-[#783524] text-sm font-semibold transition">Home</a>
@@ -57,10 +64,21 @@
                 <h1 id="day-title" class="pacifico text-5xl text-white mt-1 drop-shadow-md">Star Quest</h1>
                 <p id="day-subtitle" class="caveat text-2xl text-amber-100 mt-1 drop-shadow-sm">Loading...</p>
             </div>
-            <div class="flex items-center gap-2">
-                <button type="button" onclick="changeDay(-1)" class="rounded-xl border border-orange-200 bg-white px-4 py-2 text-sm font-semibold text-orange-600 shadow-sm hover:bg-orange-50">Previous</button>
-                <button type="button" onclick="goToday()" class="rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-orange-600">Today</button>
-                <button type="button" onclick="changeDay(1)" class="rounded-xl border border-orange-200 bg-white px-4 py-2 text-sm font-semibold text-orange-600 shadow-sm hover:bg-orange-50">Next</button>
+            <div class="flex flex-col items-start md:items-end gap-3">
+                <div>
+                    <label for="player-select" class="block text-xs font-bold uppercase tracking-wider text-amber-100 mb-1">Player</label>
+                    <select id="player-select" onchange="changePlayer(this.value)" class="rounded-xl border border-orange-200 bg-white px-4 py-2 text-sm font-bold text-[#783524] shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-300">
+                        <option value="aretha">Aretha</option>
+                        <option value="aarav">Aarav</option>
+                        <option value="arjun">Arjun</option>
+                        <option value="adi">Adi</option>
+                    </select>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="changeDay(-1)" class="rounded-xl border border-orange-200 bg-white px-4 py-2 text-sm font-semibold text-orange-600 shadow-sm hover:bg-orange-50">Previous</button>
+                    <button type="button" onclick="goToday()" class="rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-orange-600">Today</button>
+                    <button type="button" onclick="changeDay(1)" class="rounded-xl border border-orange-200 bg-white px-4 py-2 text-sm font-semibold text-orange-600 shadow-sm hover:bg-orange-50">Next</button>
+                </div>
             </div>
         </div>
     </section>
@@ -70,7 +88,7 @@
             <div class="flex items-center gap-4">
                 <div class="w-16 h-16 rounded-2xl bg-[#783524] text-white flex items-center justify-center text-3xl font-bold shadow-md">&#9733;</div>
                 <div>
-                    <p class="text-xs font-bold uppercase tracking-wider text-[#9f4d35]">Player rank</p>
+                    <p id="player-rank-label" class="text-xs font-bold uppercase tracking-wider text-[#9f4d35]">Aretha&apos;s rank</p>
                     <h2 id="rank-title" class="pacifico text-3xl text-[#783524] leading-tight">Rising Star</h2>
                     <p id="level-text" class="text-sm text-[#9f4d35]/80 font-semibold">Level 1</p>
                 </div>
@@ -193,6 +211,7 @@
 
 <script>
 const DEFAULT_TASKS = JSON.parse(document.getElementById('task-data').textContent);
+const PLAYER_MAP = JSON.parse(document.getElementById('player-data').textContent);
 const TASK_KEY = 'daily_chores_tasks_v1';
 const DONE_KEY = 'daily_chores_done_v1';
 const PENALTY_KEY = 'daily_chores_penalties_v1';
@@ -204,6 +223,8 @@ const PENALTIES = [
 let selectedDate = new Date();
 let selectedScheduleDate = new Date();
 let visibleScheduleMonth = new Date(selectedScheduleDate.getFullYear(), selectedScheduleDate.getMonth(), 1);
+let selectedPlayerSlug = window.STAR_QUEST_PLAYER?.slug || 'aretha';
+let selectedPlayer = window.STAR_QUEST_PLAYER?.name || PLAYER_MAP[selectedPlayerSlug] || 'Aretha';
 
 function esc(value) {
     return String(value ?? '')
@@ -221,6 +242,19 @@ function loadJSON(key, fallback) {
 
 function saveJSON(key, data) {
     localStorage.setItem(key, JSON.stringify(data));
+}
+
+function playerSlug() {
+    return selectedPlayerSlug;
+}
+
+function scopedKey(key) {
+    return `${key}_${playerSlug()}`;
+}
+
+function changePlayer(name) {
+    const slug = PLAYER_MAP[name] ? name : 'aretha';
+    window.location.href = `/checklist/${slug}`;
 }
 
 function dateKey(date) {
@@ -246,10 +280,10 @@ function weekStart(date) {
 }
 
 function getTasks() {
-    const stored = loadJSON(TASK_KEY, null);
+    const stored = loadJSON(scopedKey(TASK_KEY), null);
     if (!stored) {
         const fresh = DEFAULT_TASKS.map(task => ({ ...task }));
-        saveJSON(TASK_KEY, fresh);
+        saveJSON(scopedKey(TASK_KEY), fresh);
         return fresh;
     }
     const defaultsByName = new Map(DEFAULT_TASKS.map(task => [task.name, task]));
@@ -272,23 +306,23 @@ function getTasks() {
     const missing = DEFAULT_TASKS.filter(task => !names.has(task.name));
     if (missing.length) {
         const merged = [...refreshed, ...missing.map(task => ({ ...task }))];
-        saveJSON(TASK_KEY, merged);
+        saveJSON(scopedKey(TASK_KEY), merged);
         return merged;
     }
-    if (changed) saveJSON(TASK_KEY, refreshed);
+    if (changed) saveJSON(scopedKey(TASK_KEY), refreshed);
     return refreshed;
 }
 
 function getDone() {
-    return loadJSON(DONE_KEY, {});
+    return loadJSON(scopedKey(DONE_KEY), {});
 }
 
 function getPenalties() {
-    return loadJSON(PENALTY_KEY, {});
+    return loadJSON(scopedKey(PENALTY_KEY), {});
 }
 
 function getSchedule() {
-    return loadJSON(SCHEDULE_KEY, {});
+    return loadJSON(scopedKey(SCHEDULE_KEY), {});
 }
 
 function taskDoneKey(task, date) {
@@ -313,7 +347,7 @@ function toggleTask(name) {
     if (index >= 0) done[key].splice(index, 1);
     else done[key].push(name);
     if (!done[key].length) delete done[key];
-    saveJSON(DONE_KEY, done);
+    saveJSON(scopedKey(DONE_KEY), done);
     render();
 }
 
@@ -329,7 +363,7 @@ function togglePenalty(name) {
     if (index >= 0) penalties[key].splice(index, 1);
     else penalties[key].push(name);
     if (!penalties[key].length) delete penalties[key];
-    saveJSON(PENALTY_KEY, penalties);
+    saveJSON(scopedKey(PENALTY_KEY), penalties);
     render();
 }
 
@@ -387,7 +421,7 @@ function addScheduledQuest() {
     const key = dateKey(selectedScheduleDate);
     if (!schedule[key]) schedule[key] = [];
     if (!schedule[key].includes(name)) schedule[key].push(name);
-    saveJSON(SCHEDULE_KEY, schedule);
+    saveJSON(scopedKey(SCHEDULE_KEY), schedule);
     renderSchedule();
 }
 
@@ -397,7 +431,7 @@ function removeScheduledQuest(name) {
     if (!schedule[key]) return;
     schedule[key] = schedule[key].filter(item => item !== name);
     if (!schedule[key].length) delete schedule[key];
-    saveJSON(SCHEDULE_KEY, schedule);
+    saveJSON(scopedKey(SCHEDULE_KEY), schedule);
     renderSchedule();
 }
 
@@ -559,6 +593,9 @@ function render() {
     const weekly = tasks.filter(task => task.frequency === 'weekly');
 
     const title = selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+    document.getElementById('player-select').value = selectedPlayerSlug;
+    document.getElementById('day-title').textContent = `${selectedPlayer}'s Star Quest`;
+    document.getElementById('player-rank-label').textContent = `${selectedPlayer}'s rank`;
     document.getElementById('day-subtitle').textContent = title;
 
     const dailyDone = daily.filter(task => isDone(task, selectedDate, done)).length;
