@@ -43,6 +43,8 @@
 {% block content %}
 <script type="application/json" id="task-data">{{ activities_js | safe }}</script>
 <script type="application/json" id="player-data">{{ players_js | safe }}</script>
+<script type="application/json" id="state-data">{{ state_js | safe }}</script>
+<script type="application/json" id="leaderboard-data">{{ leaderboard_js | safe }}</script>
 <script>
     window.STAR_QUEST_PLAYER = {
         name: {{ player_name | tojson }},
@@ -166,6 +168,17 @@
     </section>
 
     <section class="bg-white rounded-2xl border border-orange-100 shadow-md overflow-hidden mb-6">
+        <div class="px-5 py-4 border-b border-orange-100 flex items-center justify-between gap-4">
+            <div>
+                <h2 class="font-bold text-gray-700">Shared leaderboard</h2>
+                <p class="text-sm text-gray-400">Everyone can see stars. Only your own board can be edited.</p>
+            </div>
+            <button type="button" onclick="refreshLeaderboard()" class="rounded-xl border border-orange-200 bg-white px-3 py-2 text-xs font-bold text-orange-600 hover:bg-orange-50">Refresh</button>
+        </div>
+        <div id="leaderboard-list" class="grid sm:grid-cols-2 gap-3 p-5"></div>
+    </section>
+
+    <section class="bg-white rounded-2xl border border-orange-100 shadow-md overflow-hidden mb-6">
         <div class="px-5 py-4 border-b border-orange-100 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
                 <h2 class="font-bold text-gray-700">Quest calendar</h2>
@@ -212,6 +225,8 @@
 <script>
 const DEFAULT_TASKS = JSON.parse(document.getElementById('task-data').textContent);
 const PLAYER_MAP = JSON.parse(document.getElementById('player-data').textContent);
+const SERVER_STATE = JSON.parse(document.getElementById('state-data').textContent);
+let leaderboardData = JSON.parse(document.getElementById('leaderboard-data').textContent);
 const TASK_KEY = 'daily_chores_tasks_v1';
 const DONE_KEY = 'daily_chores_done_v1';
 const PENALTY_KEY = 'daily_chores_penalties_v1';
@@ -225,6 +240,13 @@ let selectedScheduleDate = new Date();
 let visibleScheduleMonth = new Date(selectedScheduleDate.getFullYear(), selectedScheduleDate.getMonth(), 1);
 let selectedPlayerSlug = window.STAR_QUEST_PLAYER?.slug || 'aretha';
 let selectedPlayer = window.STAR_QUEST_PLAYER?.name || PLAYER_MAP[selectedPlayerSlug] || 'Aretha';
+let saveTimer = null;
+let appState = {
+    tasks: SERVER_STATE.tasks || loadJSON(scopedKey(TASK_KEY), null),
+    done: SERVER_STATE.done || loadJSON(scopedKey(DONE_KEY), {}),
+    penalties: SERVER_STATE.penalties || loadJSON(scopedKey(PENALTY_KEY), {}),
+    schedule: SERVER_STATE.schedule || loadJSON(scopedKey(SCHEDULE_KEY), {})
+};
 
 function esc(value) {
     return String(value ?? '')
@@ -257,6 +279,45 @@ function changePlayer(name) {
     window.location.href = `/checklist/${slug}`;
 }
 
+function persistLocalState() {
+    saveJSON(scopedKey(TASK_KEY), appState.tasks);
+    saveJSON(scopedKey(DONE_KEY), appState.done || {});
+    saveJSON(scopedKey(PENALTY_KEY), appState.penalties || {});
+    saveJSON(scopedKey(SCHEDULE_KEY), appState.schedule || {});
+}
+
+function queueServerSave() {
+    persistLocalState();
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveServerState, 250);
+}
+
+async function saveServerState() {
+    try {
+        const res = await fetch(`/api/players/${selectedPlayerSlug}/state`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ state: appState })
+        });
+        if (res.ok) {
+            const data = await res.json();
+            leaderboardData = data.leaderboard || leaderboardData;
+            renderLeaderboard();
+        }
+    } catch {}
+}
+
+async function refreshLeaderboard() {
+    try {
+        const res = await fetch('/api/leaderboard');
+        if (res.ok) {
+            const data = await res.json();
+            leaderboardData = data.players || leaderboardData;
+            renderLeaderboard();
+        }
+    } catch {}
+}
+
 function dateKey(date) {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -280,10 +341,11 @@ function weekStart(date) {
 }
 
 function getTasks() {
-    const stored = loadJSON(scopedKey(TASK_KEY), null);
+    const stored = appState.tasks;
     if (!stored) {
         const fresh = DEFAULT_TASKS.map(task => ({ ...task }));
-        saveJSON(scopedKey(TASK_KEY), fresh);
+        appState.tasks = fresh;
+        queueServerSave();
         return fresh;
     }
     const defaultsByName = new Map(DEFAULT_TASKS.map(task => [task.name, task]));
@@ -306,23 +368,30 @@ function getTasks() {
     const missing = DEFAULT_TASKS.filter(task => !names.has(task.name));
     if (missing.length) {
         const merged = [...refreshed, ...missing.map(task => ({ ...task }))];
-        saveJSON(scopedKey(TASK_KEY), merged);
+        appState.tasks = merged;
+        queueServerSave();
         return merged;
     }
-    if (changed) saveJSON(scopedKey(TASK_KEY), refreshed);
+    if (changed) {
+        appState.tasks = refreshed;
+        queueServerSave();
+    }
     return refreshed;
 }
 
 function getDone() {
-    return loadJSON(scopedKey(DONE_KEY), {});
+    appState.done = appState.done || {};
+    return appState.done;
 }
 
 function getPenalties() {
-    return loadJSON(scopedKey(PENALTY_KEY), {});
+    appState.penalties = appState.penalties || {};
+    return appState.penalties;
 }
 
 function getSchedule() {
-    return loadJSON(scopedKey(SCHEDULE_KEY), {});
+    appState.schedule = appState.schedule || {};
+    return appState.schedule;
 }
 
 function taskDoneKey(task, date) {
@@ -347,7 +416,8 @@ function toggleTask(name) {
     if (index >= 0) done[key].splice(index, 1);
     else done[key].push(name);
     if (!done[key].length) delete done[key];
-    saveJSON(scopedKey(DONE_KEY), done);
+    appState.done = done;
+    queueServerSave();
     render();
 }
 
@@ -363,7 +433,8 @@ function togglePenalty(name) {
     if (index >= 0) penalties[key].splice(index, 1);
     else penalties[key].push(name);
     if (!penalties[key].length) delete penalties[key];
-    saveJSON(scopedKey(PENALTY_KEY), penalties);
+    appState.penalties = penalties;
+    queueServerSave();
     render();
 }
 
@@ -421,7 +492,8 @@ function addScheduledQuest() {
     const key = dateKey(selectedScheduleDate);
     if (!schedule[key]) schedule[key] = [];
     if (!schedule[key].includes(name)) schedule[key].push(name);
-    saveJSON(scopedKey(SCHEDULE_KEY), schedule);
+    appState.schedule = schedule;
+    queueServerSave();
     renderSchedule();
 }
 
@@ -431,7 +503,8 @@ function removeScheduledQuest(name) {
     if (!schedule[key]) return;
     schedule[key] = schedule[key].filter(item => item !== name);
     if (!schedule[key].length) delete schedule[key];
-    saveJSON(scopedKey(SCHEDULE_KEY), schedule);
+    appState.schedule = schedule;
+    queueServerSave();
     renderSchedule();
 }
 
@@ -585,6 +658,22 @@ function streak(done, tasks) {
     return count;
 }
 
+function renderLeaderboard() {
+    const list = document.getElementById('leaderboard-list');
+    if (!list) return;
+    const sorted = [...(leaderboardData || [])].sort((a, b) => Number(b.total_stars || 0) - Number(a.total_stars || 0));
+    list.innerHTML = sorted.map((player, index) => {
+        const active = player.player_slug === selectedPlayerSlug;
+        return `<div class="rounded-xl border ${active ? 'border-orange-300 bg-orange-50' : 'border-orange-100 bg-white'} px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <span class="w-8 h-8 rounded-lg ${active ? 'bg-orange-500 text-white' : 'bg-amber-100 text-amber-700'} flex items-center justify-center text-sm font-bold">${index + 1}</span>
+                <span class="font-bold ${active ? 'text-[#783524]' : 'text-gray-700'}">${esc(player.player_name)}</span>
+            </div>
+            <span class="font-bold text-orange-500">${Number(player.total_stars || 0)} &#9733;</span>
+        </div>`;
+    }).join('');
+}
+
 function render() {
     const tasks = getTasks();
     const done = getDone();
@@ -629,6 +718,7 @@ function render() {
     document.getElementById('streak-text').textContent = `${currentStreak} day${currentStreak === 1 ? '' : 's'} combo`;
     document.getElementById('celebration').classList.toggle('hidden', !(daily.length > 0 && dailyDone === daily.length));
     renderSchedule(tasks);
+    renderLeaderboard();
 
     for (const id of ['today-stars', 'week-stars', 'total-stars']) {
         const el = document.getElementById(id);

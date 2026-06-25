@@ -1,5 +1,6 @@
 import asyncio
 import calendar as _calendar
+import hmac
 import json
 import os
 import random
@@ -20,6 +21,9 @@ load_dotenv()
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
 DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "summer2024")
 SECRET_KEY = os.getenv("SECRET_KEY", "summer-checklist-dev-key-change-me")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_TABLE = os.getenv("SUPABASE_TABLE", "star_quest_profiles")
 
 app = FastAPI(title="Summer Checklist")
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
@@ -72,6 +76,10 @@ def render_template(request: Request, name: str, context: dict, status_code: int
 DATA_FILE = (
     Path("/tmp/activities.json") if os.getenv("VERCEL")
     else _BASE_DIR / "data" / "activities.json"
+)
+PROFILE_FILE = (
+    Path("/tmp/star_quest_profiles.json") if os.getenv("VERCEL")
+    else _BASE_DIR / "data" / "star_quest_profiles.json"
 )
 
 # In-memory fallback used when both /tmp and data/ are unavailable.
@@ -337,6 +345,190 @@ PLAYERS = {
     "adi": "Adi",
 }
 
+PLAYER_PINS = {
+    "aretha": os.getenv("ARETHA_PIN", "1111"),
+    "aarav": os.getenv("AARAV_PIN", "2222"),
+    "arjun": os.getenv("ARJUN_PIN", "3333"),
+    "adi": os.getenv("ADI_PIN", "4444"),
+}
+
+PENALTY_RULES = [
+    {"name": "iPad watched for more than 1 hour", "stars": 5},
+    {"name": "TV watched for more than 1 hour", "stars": 5},
+]
+
+
+def default_profile_state() -> dict:
+    return {"tasks": None, "done": {}, "penalties": {}, "schedule": {}}
+
+
+def _date_add_days(key: str, days: int) -> str:
+    from datetime import date, timedelta
+
+    y, m, d = [int(part) for part in key.split("-")]
+    return (date(y, m, d) + timedelta(days=days)).isoformat()
+
+
+def _week_start_key(key: str) -> str:
+    from datetime import date, timedelta
+
+    y, m, d = [int(part) for part in key.split("-")]
+    current = date(y, m, d)
+    return (current - timedelta(days=current.weekday())).isoformat()
+
+
+def compute_total_stars(state: dict) -> int:
+    tasks = state.get("tasks") or CHECKLIST_ACTIVITIES
+    done = state.get("done") or {}
+    penalties = state.get("penalties") or {}
+    all_keys = set(done) | set(penalties)
+
+    def task_done(task: dict, key: str) -> bool:
+        bucket_key = _week_start_key(key) if task.get("frequency") == "weekly" else key
+        return task.get("name") in (done.get(bucket_key) or [])
+
+    def penalty_stars(key: str) -> int:
+        marked = penalties.get(key) or []
+        return sum(int(rule["stars"]) for rule in PENALTY_RULES if rule["name"] in marked)
+
+    total = 0
+    for key in all_keys:
+        earned = sum(int(task.get("stars") or 1) for task in tasks if task_done(task, key))
+        total += max(0, earned - penalty_stars(key))
+    return total
+
+
+def _local_profiles() -> dict:
+    if PROFILE_FILE.exists():
+        try:
+            return json.loads(PROFILE_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_local_profiles(data: dict) -> None:
+    PROFILE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    PROFILE_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+async def _supabase_request(method: str, path: str, json_body: Optional[dict] = None):
+    if not (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY):
+        return None
+    headers = {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+    }
+    if method.upper() == "POST":
+        headers["Prefer"] = "resolution=merge-duplicates,return=minimal"
+    async with httpx.AsyncClient(timeout=8) as client:
+        response = await client.request(
+            method,
+            f"{SUPABASE_URL}/rest/v1/{path}",
+            headers=headers,
+            json=json_body,
+        )
+        response.raise_for_status()
+        if response.content:
+            return response.json()
+        return None
+
+
+async def load_profile(player_slug: str) -> dict:
+    if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
+        rows = await _supabase_request(
+            "GET",
+            f"{SUPABASE_TABLE}?select=player_slug,player_name,state,total_stars,updated_at&player_slug=eq.{player_slug}",
+        )
+        if rows:
+            row = rows[0]
+            return {
+                "player_slug": row["player_slug"],
+                "player_name": row["player_name"],
+                "state": row.get("state") or default_profile_state(),
+                "total_stars": int(row.get("total_stars") or 0),
+                "updated_at": row.get("updated_at"),
+            }
+
+    local = _local_profiles()
+    profile = local.get(player_slug)
+    if profile:
+        return profile
+    return {
+        "player_slug": player_slug,
+        "player_name": PLAYERS[player_slug],
+        "state": default_profile_state(),
+        "total_stars": 0,
+        "updated_at": None,
+    }
+
+
+async def save_profile(player_slug: str, state: dict) -> dict:
+    cleaned_state = {
+        "tasks": state.get("tasks"),
+        "done": state.get("done") or {},
+        "penalties": state.get("penalties") or {},
+        "schedule": state.get("schedule") or {},
+    }
+    total_stars = compute_total_stars(cleaned_state)
+    profile = {
+        "player_slug": player_slug,
+        "player_name": PLAYERS[player_slug],
+        "state": cleaned_state,
+        "total_stars": total_stars,
+    }
+    if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
+        await _supabase_request(
+            "POST",
+            f"{SUPABASE_TABLE}?on_conflict=player_slug",
+            profile,
+        )
+    else:
+        local = _local_profiles()
+        local[player_slug] = {**profile, "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        _save_local_profiles(local)
+    return profile
+
+
+async def leaderboard() -> list[dict]:
+    if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
+        rows = await _supabase_request(
+            "GET",
+            f"{SUPABASE_TABLE}?select=player_slug,player_name,total_stars,updated_at&order=total_stars.desc",
+        )
+        if rows is not None:
+            existing = {row["player_slug"]: row for row in rows}
+            return [
+                {
+                    "player_slug": slug,
+                    "player_name": existing.get(slug, {}).get("player_name", name),
+                    "total_stars": int(existing.get(slug, {}).get("total_stars") or 0),
+                    "updated_at": existing.get(slug, {}).get("updated_at"),
+                }
+                for slug, name in PLAYERS.items()
+            ]
+    local = _local_profiles()
+    return [
+        {
+            "player_slug": slug,
+            "player_name": local.get(slug, {}).get("player_name", name),
+            "total_stars": int(local.get(slug, {}).get("total_stars") or 0),
+            "updated_at": local.get(slug, {}).get("updated_at"),
+        }
+        for slug, name in PLAYERS.items()
+    ]
+
+
+def player_unlocked(request: Request, player_slug: str) -> bool:
+    return bool(request.session.get(f"player_unlocked:{player_slug}"))
+
+
+def require_player_unlocked(request: Request, player_slug: str) -> None:
+    require_auth(request)
+    if player_slug not in PLAYERS or not player_unlocked(request, player_slug):
+        raise HTTPException(status_code=403, detail="Player profile is locked")
+
 
 @app.get("/checklist", response_class=HTMLResponse)
 async def checklist_page(request: Request):
@@ -350,6 +542,16 @@ async def checklist_player_page(request: Request, player_slug: str):
     player_name = PLAYERS.get(player_slug.lower())
     if not player_name:
         return RedirectResponse("/checklist/aretha", status_code=302)
+    player_slug = player_slug.lower()
+    board = await leaderboard()
+    if not player_unlocked(request, player_slug):
+        return render_template(request, "child_login.html", {
+            "player_name": player_name,
+            "player_slug": player_slug,
+            "leaderboard": board,
+            "error": None,
+        })
+    profile = await load_profile(player_slug)
     months = [
         {**m, "weeks": _cal.monthdayscalendar(2026, m["num"])}
         for m in _MONTHS
@@ -359,8 +561,60 @@ async def checklist_player_page(request: Request, player_slug: str):
         "activities": CHECKLIST_ACTIVITIES,
         "activities_js": json.dumps(CHECKLIST_ACTIVITIES),
         "player_name": player_name,
-        "player_slug": player_slug.lower(),
+        "player_slug": player_slug,
         "players_js": json.dumps(PLAYERS),
+        "state_js": json.dumps(profile["state"]),
+        "leaderboard_js": json.dumps(board),
+    })
+
+
+@app.post("/checklist/{player_slug}/unlock")
+async def unlock_child_profile(request: Request, player_slug: str, pin: str = Form(...)):
+    require_auth(request)
+    player_slug = player_slug.lower()
+    player_name = PLAYERS.get(player_slug)
+    if not player_name:
+        return RedirectResponse("/checklist/aretha", status_code=302)
+    expected = PLAYER_PINS[player_slug]
+    if hmac.compare_digest(pin.strip(), expected):
+        request.session[f"player_unlocked:{player_slug}"] = True
+        return RedirectResponse(f"/checklist/{player_slug}", status_code=302)
+    return render_template(request, "child_login.html", {
+        "player_name": player_name,
+        "player_slug": player_slug,
+        "leaderboard": await leaderboard(),
+        "error": "Incorrect PIN",
+    }, status_code=401)
+
+
+@app.get("/api/leaderboard")
+async def api_leaderboard(request: Request):
+    require_auth(request)
+    return JSONResponse({"players": await leaderboard()})
+
+
+@app.get("/api/players/{player_slug}/state")
+async def api_player_state(player_slug: str, request: Request):
+    player_slug = player_slug.lower()
+    require_player_unlocked(request, player_slug)
+    profile = await load_profile(player_slug)
+    return JSONResponse({
+        "state": profile["state"],
+        "total_stars": profile["total_stars"],
+        "leaderboard": await leaderboard(),
+    })
+
+
+@app.post("/api/players/{player_slug}/state")
+async def api_save_player_state(player_slug: str, request: Request):
+    player_slug = player_slug.lower()
+    require_player_unlocked(request, player_slug)
+    payload = await request.json()
+    profile = await save_profile(player_slug, payload.get("state") or {})
+    return JSONResponse({
+        "ok": True,
+        "total_stars": profile["total_stars"],
+        "leaderboard": await leaderboard(),
     })
 
 

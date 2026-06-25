@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block content %}
+<main class="min-h-screen flex items-center justify-center px-4 py-10 bg-[#5f2f28]">
+    <section class="w-full max-w-4xl grid md:grid-cols-[1fr_22rem] gap-5">
+        <div class="bg-[#fff8e7] rounded-2xl shadow-2xl border border-white/70 p-8">
+            <p class="text-xs font-bold uppercase tracking-wider text-orange-500 mb-2">Private quest board</p>
+            <h1 class="pacifico text-5xl text-[#783524] mb-2">{{ player_name }}&apos;s Star Quest</h1>
+            <p class="text-gray-500 mb-6">Enter {{ player_name }}&apos;s PIN to open and update this chore list.</p>
+
+            {% if error %}
+            <div class="bg-red-50 border border-red-100 text-red-500 rounded-xl px-4 py-3 mb-5 text-sm text-center">
+                {{ error }}
+            </div>
+            {% endif %}
+
+            <form method="post" action="/checklist/{{ player_slug }}/unlock" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">PIN</label>
+                    <input
+                        type="password"
+                        inputmode="numeric"
+                        name="pin"
+                        required
+                        autofocus
+                        class="w-full border border-orange-200 rounded-xl px-4 py-3 text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-orange-300"
+                        placeholder="Enter PIN"
+                    >
+                </div>
+                <button type="submit" class="w-full rounded-xl bg-orange-500 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-orange-600">
+                    Unlock {{ player_name }}
+                </button>
+            </form>
+            <a href="/" class="inline-block mt-5 text-sm font-semibold text-[#9f4d35] hover:text-[#783524]">Choose another player</a>
+        </div>
+
+        <aside class="bg-white rounded-2xl shadow-xl border border-orange-100 p-6">
+            <p class="text-xs font-bold uppercase tracking-wider text-orange-400 mb-2">Shared leaderboard</p>
+            <h2 class="pacifico text-3xl text-[#783524] mb-4">Star standings</h2>
+            <div class="space-y-3">
+                {% for player in leaderboard %}
+                <div class="flex items-center justify-between rounded-xl bg-orange-50 border border-orange-100 px-4 py-3">
+                    <span class="font-bold text-gray-700">{{ player.player_name }}</span>
+                    <span class="font-bold text-orange-500">{{ player.total_stars }} &#9733;</span>
+                </div>
+                {% endfor %}
+            </div>
+        </aside>
+    </section>
+</main>
+{% endblock %}
