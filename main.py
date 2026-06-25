@@ -429,7 +429,10 @@ async def _supabase_request(method: str, path: str, json_body: Optional[dict] = 
             headers=headers,
             json=json_body,
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError:
+            return None
         if response.content:
             return response.json()
         return None
@@ -478,13 +481,14 @@ async def save_profile(player_slug: str, state: dict) -> dict:
         "state": cleaned_state,
         "total_stars": total_stars,
     }
+    saved_to_supabase = False
     if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
-        await _supabase_request(
+        saved_to_supabase = await _supabase_request(
             "POST",
             f"{SUPABASE_TABLE}?on_conflict=player_slug",
             profile,
-        )
-    else:
+        ) is not None
+    if not saved_to_supabase:
         local = _local_profiles()
         local[player_slug] = {**profile, "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
         _save_local_profiles(local)
