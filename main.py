@@ -1,3 +1,4 @@
+import calendar as _calendar
 import json
 import os
 import random
@@ -182,3 +183,39 @@ async def delete_activity(activity_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Activity not found")
     save_activities(new_list)
     return JSONResponse({"ok": True})
+
+
+# ── Checklist page ────────────────────────────────────────────────────────────
+
+CHECKLIST_ACTIVITIES = [
+    {"name": "RSM",    "emoji": "📐"},
+    {"name": "Kumon",  "emoji": "📚"},
+    {"name": "Dance",  "emoji": "💃"},
+    {"name": "Shloka", "emoji": "🙏"},
+    {"name": "Music",  "emoji": "🎵"},
+    {"name": "Piano",  "emoji": "🎹"},
+]
+
+_cal = _calendar.Calendar(firstweekday=6)  # Sunday-first
+
+_MONTHS = [
+    {"num": 6, "name": "June",   "gradient": "from-rose-400 to-orange-400"},
+    {"num": 7, "name": "July",   "gradient": "from-amber-400 to-yellow-300"},
+    {"num": 8, "name": "August", "gradient": "from-teal-400 to-cyan-400"},
+]
+
+
+@app.get("/checklist", response_class=HTMLResponse)
+async def checklist_page(request: Request):
+    if not request.session.get("authenticated"):
+        return RedirectResponse("/login", status_code=302)
+    months = [
+        {**m, "weeks": _cal.monthdayscalendar(2026, m["num"])}
+        for m in _MONTHS
+    ]
+    return templates.TemplateResponse("checklist.html", {
+        "request": request,
+        "months": months,
+        "activities": CHECKLIST_ACTIVITIES,
+        "activity_names_js": json.dumps([a["name"] for a in CHECKLIST_ACTIVITIES]),
+    })

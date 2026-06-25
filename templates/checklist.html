@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block head %}
+<style>
+    body { background-color: #FFFBF0 !important; background-image: none !important; }
+
+    /* ── Custom checkbox ───────────────────── */
+    .act-check {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 1.5rem;
+        height: 1.5rem;
+        border: 2.5px solid #fdba74;
+        border-radius: 7px;
+        background: white;
+        cursor: pointer;
+        position: relative;
+        flex-shrink: 0;
+        transition: background 0.15s, border-color 0.15s, transform 0.1s;
+    }
+    .act-check:hover  { border-color: #f97316; transform: scale(1.08); }
+    .act-check:checked {
+        background: #f97316;
+        border-color: #f97316;
+    }
+    .act-check:checked::after {
+        content: '✓';
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1rem;
+        font-weight: 700;
+        line-height: 1;
+    }
+
+    /* ── Calendar day button ───────────────── */
+    .day-btn { transition: background 0.12s, color 0.12s; }
+    .day-btn:hover:not(.day-selected) { background: #fed7aa; border-radius: 0.5rem; }
+    .day-selected { background: #f97316 !important; color: white !important; font-weight: 700; border-radius: 0.5rem; }
+    .has-dot .dot { display: block !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Top nav ──────────────────────────────────────────── -->
+<nav class="sticky top-0 z-30 bg-[#FFFBF0]/90 backdrop-blur-sm border-b border-amber-100 px-5 py-3 flex items-center justify-between">
+    <a href="/" class="text-orange-400 hover:text-orange-600 text-sm font-semibold transition">← Home</a>
+    <span class="pacifico text-xl text-orange-500">☀️ Summer 2026</span>
+    <a href="/logout" class="text-xs text-gray-400 hover:text-gray-600 transition">Logout</a>
+</nav>
+
+<!-- ── Page title ───────────────────────────────────────── -->
+<div class="text-center pt-10 pb-4 px-4">
+    <h1 class="pacifico text-5xl md:text-6xl text-orange-500 mb-2">My Summer Checklist</h1>
+    <p class="caveat text-2xl text-amber-500">Tap any day, then tick off what you did! 🌊</p>
+</div>
+
+<!-- ── Month sections ───────────────────────────────────── -->
+{% for month in months %}
+<section class="max-w-3xl mx-auto px-4 mb-14">
+
+    <!-- Month header -->
+    <div class="bg-gradient-to-r {{ month.gradient }} rounded-3xl py-5 px-8 mb-4 shadow-lg text-center">
+        <h2 class="pacifico text-4xl text-white drop-shadow-lg">{{ month.name }} 2026</h2>
+    </div>
+
+    <!-- Card: calendar left, activities right -->
+    <div class="bg-white rounded-3xl shadow-md overflow-hidden">
+        <div class="flex flex-col md:flex-row md:divide-x divide-gray-100">
+
+            <!-- ── Mini calendar ──────────────────────── -->
+            <div class="p-5 md:w-72 shrink-0">
+                <!-- Column headers -->
+                <div class="grid grid-cols-7 mb-1">
+                    {% for h in ['Su','Mo','Tu','We','Th','Fr','Sa'] %}
+                    <div class="text-center text-xs font-bold text-gray-400 py-1.5 tracking-wide">{{ h }}</div>
+                    {% endfor %}
+                </div>
+                <!-- Day grid -->
+                <div class="grid grid-cols-7 gap-0.5">
+                    {% for week in month.weeks %}
+                    {% for day in week %}
+                    {% if day == 0 %}
+                    <div class="aspect-square"></div>
+                    {% else %}
+                    <button
+                        class="day-btn aspect-square text-sm text-gray-700 relative flex flex-col items-center justify-center"
+                        id="day-{{ month.num }}-{{ day }}"
+                        onclick="selectDay({{ month.num }}, {{ day }}, this)"
+                    >
+                        {{ day }}
+                        <span class="dot hidden absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-orange-400"></span>
+                    </button>
+                    {% endif %}
+                    {% endfor %}
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- ── Activity panel ─────────────────────── -->
+            <div class="flex-1 p-6 min-h-56">
+
+                <!-- Placeholder -->
+                <div id="placeholder-{{ month.num }}"
+                     class="h-full flex flex-col items-center justify-center text-center gap-2">
+                    <div class="text-5xl">☀️</div>
+                    <p class="caveat text-2xl text-gray-400 leading-tight">Pick a day to<br>see activities!</p>
+                </div>
+
+                <!-- Activities (hidden until a day is picked) -->
+                <div id="panel-{{ month.num }}" style="display:none" class="flex flex-col h-full gap-5">
+
+                    <p id="day-label-{{ month.num }}"
+                       class="caveat text-2xl font-bold text-gray-700 border-b border-gray-100 pb-3"></p>
+
+                    <ul class="space-y-4">
+                        {% for act in activities %}
+                        <li class="flex items-center gap-3">
+                            <input
+                                type="checkbox"
+                                class="act-check"
+                                id="chk-{{ month.num }}-{{ act.name }}"
+                                onchange="saveCheck({{ month.num }}, '{{ act.name }}', this.checked)"
+                            >
+                            <label
+                                for="chk-{{ month.num }}-{{ act.name }}"
+                                id="lbl-{{ month.num }}-{{ act.name }}"
+                                class="caveat text-2xl cursor-pointer select-none flex items-center gap-2 text-gray-700 transition-all duration-150"
+                            >
+                                <span class="text-xl">{{ act.emoji }}</span>{{ act.name }}
+                            </label>
+                        </li>
+                        {% endfor %}
+                    </ul>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+</section>
+{% endfor %}
+
+<!-- Footer -->
+<div class="text-center pb-14 caveat text-xl text-amber-400 tracking-wide">
+    Make every day count! 🌞 🏖️ 🌴
+</div>
+
+<!-- ── JavaScript ────────────────────────────────────────── -->
+<script>
+const NAMES     = {{ activity_names_js | safe }};
+const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const MON_NAMES = { 6:'June', 7:'July', 8:'August' };
+
+const picked = {};   // { month: "2026-MM-DD" }
+
+function key(m, d) {
+    return `2026-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+
+function read() {
+    try { return JSON.parse(localStorage.getItem('summer_checklist_2026') || '{}'); }
+    catch { return {}; }
+}
+function write(data) {
+    localStorage.setItem('summer_checklist_2026', JSON.stringify(data));
+}
+
+function selectDay(month, day, btn) {
+    const k = key(month, day);
+    picked[month] = k;
+
+    // Highlight the clicked day button
+    document.querySelectorAll(`[id^="day-${month}-"]`).forEach(b => b.classList.remove('day-selected'));
+    btn.classList.add('day-selected');
+
+    // Label e.g. "Monday, June 16"
+    const dt = new Date(2026, month - 1, day);
+    document.getElementById(`day-label-${month}`).textContent =
+        `${DAY_NAMES[dt.getDay()]}, ${MON_NAMES[month]} ${day}`;
+
+    // Swap placeholder → panel
+    document.getElementById(`placeholder-${month}`).style.display = 'none';
+    document.getElementById(`panel-${month}`).style.display       = 'flex';
+
+    // Restore saved ticks for this day
+    const saved = read()[k] || {};
+    NAMES.forEach(name => {
+        const chk = document.getElementById(`chk-${month}-${name}`);
+        const lbl = document.getElementById(`lbl-${month}-${name}`);
+        if (!chk) return;
+        chk.checked = !!saved[name];
+        styleLabel(lbl, chk.checked);
+    });
+}
+
+function saveCheck(month, name, checked) {
+    const k = picked[month];
+    if (!k) return;
+
+    const data = read();
+    if (!data[k]) data[k] = {};
+    if (checked) data[k][name] = true;
+    else         delete data[k][name];
+    if (!Object.keys(data[k]).length) delete data[k];
+    write(data);
+
+    styleLabel(document.getElementById(`lbl-${month}-${name}`), checked);
+    refreshDot(month, k, data);
+}
+
+function styleLabel(lbl, checked) {
+    if (!lbl) return;
+    lbl.classList.toggle('line-through',  checked);
+    lbl.classList.toggle('text-gray-400', checked);
+    lbl.classList.toggle('text-gray-700', !checked);
+}
+
+function refreshDot(month, k, data) {
+    const day    = parseInt(k.split('-')[2], 10);
+    const btn    = document.getElementById(`day-${month}-${day}`);
+    if (!btn) return;
+    const hasAny = Object.values((data || read())[k] || {}).some(Boolean);
+    btn.querySelector('.dot')?.classList.toggle('hidden', !hasAny);
+}
+
+// On load: paint orange dots for any already-saved days
+document.addEventListener('DOMContentLoaded', () => {
+    Object.entries(read()).forEach(([k, dayData]) => {
+        if (!k.startsWith('2026-')) return;
+        if (!Object.values(dayData).some(Boolean)) return;
+        const [, mStr, dStr] = k.split('-');
+        const btn = document.getElementById(`day-${parseInt(mStr, 10)}-${parseInt(dStr, 10)}`);
+        btn?.querySelector('.dot')?.classList.remove('hidden');
+    });
+});
+</script>
+
+{% endblock %}
