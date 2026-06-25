@@ -336,11 +336,27 @@ PLAYER_EXTRA_TASKS = {
     ],
 }
 
+PLAYER_REMOVED_TASKS = {
+    "aarav": {"RSM", "Kumon", "Dance", "Shloka", "Music", "Piano"},
+}
+
 
 def player_default_tasks(player_slug: str) -> list[dict]:
-    tasks = [task.copy() for task in CHECKLIST_ACTIVITIES]
+    removed = PLAYER_REMOVED_TASKS.get(player_slug, set())
+    tasks = [task.copy() for task in CHECKLIST_ACTIVITIES if task["name"] not in removed]
     tasks.extend(task.copy() for task in PLAYER_EXTRA_TASKS.get(player_slug, []))
     return tasks
+
+
+def apply_player_task_rules(player_slug: str, state: dict) -> dict:
+    cleaned = state or default_profile_state()
+    removed = PLAYER_REMOVED_TASKS.get(player_slug, set())
+    if removed and cleaned.get("tasks"):
+        cleaned = {**cleaned, "tasks": [
+            task for task in cleaned["tasks"]
+            if task.get("name") not in removed
+        ]}
+    return cleaned
 
 
 _cal = _calendar.Calendar(firstweekday=6)  # Sunday-first
@@ -462,7 +478,7 @@ async def load_profile(player_slug: str) -> dict:
             return {
                 "player_slug": row["player_slug"],
                 "player_name": row["player_name"],
-                "state": row.get("state") or default_profile_state(),
+                "state": apply_player_task_rules(player_slug, row.get("state") or default_profile_state()),
                 "total_stars": int(row.get("total_stars") or 0),
                 "updated_at": row.get("updated_at"),
             }
@@ -470,6 +486,7 @@ async def load_profile(player_slug: str) -> dict:
     local = _local_profiles()
     profile = local.get(player_slug)
     if profile:
+        profile["state"] = apply_player_task_rules(player_slug, profile.get("state") or default_profile_state())
         return profile
     return {
         "player_slug": player_slug,
@@ -481,6 +498,7 @@ async def load_profile(player_slug: str) -> dict:
 
 
 async def save_profile(player_slug: str, state: dict) -> dict:
+    state = apply_player_task_rules(player_slug, state)
     cleaned_state = {
         "tasks": state.get("tasks"),
         "done": state.get("done") or {},
