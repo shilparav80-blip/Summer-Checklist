@@ -1,0 +1,18 @@
+{
+  "name": "Star Quest Chores",
+  "short_name": "Star Quest",
+  "description": "Daily chore quests with stars, levels, and rewards.",
+  "start_url": "/checklist",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#5f2f28",
+  "theme_color": "#5f2f28",
+  "icons": [
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

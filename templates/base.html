@@ -3,7 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>☀️ Summer Checklist</title>
+    <title>Summer Checklist</title>
+    <meta name="theme-color" content="#5f2f28">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Star Quest">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/app-icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/app-icon.svg">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,11 +18,18 @@
     <style>
         body { font-family: 'Inter', sans-serif; }
         .pacifico { font-family: 'Pacifico', cursive; }
-        .caveat   { font-family: 'Caveat', cursive; }
+        .caveat { font-family: 'Caveat', cursive; }
     </style>
     {% block head %}{% endblock %}
 </head>
 <body class="bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 min-h-screen">
     {% block content %}{% endblock %}
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+            });
+        }
+    </script>
 </body>
 </html>

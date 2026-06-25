@@ -11,7 +11,7 @@ from typing import Optional
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -58,6 +58,14 @@ def _safe_get_template(env_self, name, parent=None, globals=None):
 
 templates.env.get_template = _types.MethodType(_safe_get_template, templates.env)
 templates.env.cache = None
+
+
+def render_template(request: Request, name: str, context: dict, status_code: int = 200):
+    context = {"request": request, **context}
+    try:
+        return templates.TemplateResponse(request, name, context, status_code=status_code)
+    except TypeError:
+        return templates.TemplateResponse(name, context, status_code=status_code)
 
 # Vercel's project root is read-only; /tmp is writable (ephemeral between cold starts).
 # Locally we keep data/ as before.
@@ -208,18 +216,16 @@ def require_auth(request: Request) -> None:
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     if request.session.get("authenticated"):
-        return RedirectResponse("/", status_code=302)
-    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+        return RedirectResponse("/checklist", status_code=302)
+    return render_template(request, "login.html", {"error": None})
 
 
 @app.post("/login")
 async def login(request: Request, password: str = Form(...)):
     if password == DASHBOARD_PASSWORD:
         request.session["authenticated"] = True
-        return RedirectResponse("/", status_code=302)
-    return templates.TemplateResponse(
-        "login.html", {"request": request, "error": "Incorrect password"}, status_code=401
-    )
+        return RedirectResponse("/checklist", status_code=302)
+    return render_template(request, "login.html", {"error": "Incorrect password"}, status_code=401)
 
 
 @app.get("/logout")
@@ -228,15 +234,30 @@ async def logout(request: Request):
     return RedirectResponse("/login", status_code=302)
 
 
+@app.get("/manifest.webmanifest")
+async def app_manifest():
+    return FileResponse(_BASE_DIR / "static" / "manifest.webmanifest", media_type="application/manifest+json")
+
+
+@app.get("/service-worker.js")
+async def service_worker():
+    return FileResponse(_BASE_DIR / "static" / "service-worker.js", media_type="application/javascript")
+
+
+@app.get("/app-icon.svg")
+async def app_icon():
+    return FileResponse(_BASE_DIR / "static" / "app-icon.svg", media_type="image/svg+xml")
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     if not request.session.get("authenticated"):
         return RedirectResponse("/login", status_code=302)
+    return RedirectResponse("/checklist", status_code=302)
     activities = load_activities()
     hero_image = await get_hero_image()
     completed = sum(1 for a in activities if a["completed"])
-    return templates.TemplateResponse("index.html", {
-        "request": request,
+    return render_template(request, "index.html", {
         "activities": activities,
         "categories": CATEGORIES,
         "completed": completed,
@@ -286,12 +307,19 @@ async def delete_activity(activity_id: str, request: Request):
 # ── Checklist page ────────────────────────────────────────────────────────────
 
 CHECKLIST_ACTIVITIES = [
-    {"name": "RSM",    "emoji": "📐"},
-    {"name": "Kumon",  "emoji": "📚"},
-    {"name": "Dance",  "emoji": "💃"},
-    {"name": "Shloka", "emoji": "🙏"},
-    {"name": "Music",  "emoji": "🎵"},
-    {"name": "Piano",  "emoji": "🎹"},
+    {"name": "Make bed", "badge": "BED", "icon": "lotus", "frequency": "daily", "stars": 2},
+    {"name": "Brush before bed", "badge": "BRUSH", "icon": "diya", "frequency": "daily", "stars": 2},
+    {"name": "Bath", "badge": "BATH", "icon": "lotus", "frequency": "daily", "stars": 2},
+    {"name": "Unload dishwasher", "badge": "DISHES", "icon": "thali", "frequency": "daily", "stars": 2},
+    {"name": "RSM", "badge": "MATH", "icon": "mandala", "frequency": "daily", "stars": 3},
+    {"name": "Kumon", "badge": "STUDY", "icon": "book", "frequency": "daily", "stars": 3},
+    {"name": "Dance", "badge": "DANCE", "icon": "ghungroo", "frequency": "daily", "stars": 3},
+    {"name": "Shloka", "badge": "CHANT", "icon": "om", "frequency": "daily", "stars": 3},
+    {"name": "Music", "badge": "MUSIC", "icon": "tabla", "frequency": "daily", "stars": 3},
+    {"name": "Piano", "badge": "PIANO", "icon": "raga", "frequency": "daily", "stars": 3},
+    {"name": "Read a book", "badge": "READ", "icon": "book", "frequency": "daily", "stars": 3},
+    {"name": "Mop the house", "badge": "MOP", "icon": "rangoli", "frequency": "weekly", "stars": 5},
+    {"name": "Laundry", "badge": "WASH", "icon": "diya", "frequency": "weekly", "stars": 5},
 ]
 
 _cal = _calendar.Calendar(firstweekday=6)  # Sunday-first
@@ -311,8 +339,7 @@ async def checklist_page(request: Request):
         {**m, "weeks": _cal.monthdayscalendar(2026, m["num"])}
         for m in _MONTHS
     ]
-    return templates.TemplateResponse("checklist.html", {
-        "request": request,
+    return render_template(request, "checklist.html", {
         "months": months,
         "activities": CHECKLIST_ACTIVITIES,
         "activities_js": json.dumps(CHECKLIST_ACTIVITIES),

@@ -2,585 +2,451 @@
 
 {% block head %}
 <style>
-    body { background-color: #FFFBF0 !important; background-image: none !important; }
-
-    .day-btn { transition: background 0.1s, color 0.1s; border-radius: 0.5rem; }
-    .day-btn:hover:not(.day-sel)   { background: #fed7aa; }
-    .day-planned:not(.day-sel)     { background: #ffedd5; color: #9a3412; font-weight: 600; }
-    .day-sel                        { background: #f97316 !important; color: white !important; font-weight: 700; }
-
-    .act-pill {
-        border: 2px solid #fed7aa; color: #78716c;
-        transition: background 0.12s, color 0.12s, border-color 0.12s, transform 0.08s;
+    body {
+        background: #5f2f28 !important;
+        position: relative;
     }
-    .act-pill:hover    { border-color: #f97316; color: #f97316; transform: scale(1.04); }
-    .act-pill.assigned { background: #f97316; border-color: #f97316; color: white; }
-
-    .date-chip      { display: inline-flex; align-items: center; gap: 4px; }
-    .chip-gcal:hover   { color: #ea580c; }
-    .chip-remove:hover { color: #ef4444; }
-
-    /* editor modal */
-    .ed-overlay { animation: edFade  0.15s ease; }
-    .ed-card    { animation: edSlide 0.18s ease; }
-    @keyframes edFade  { from { opacity:0 } to { opacity:1 } }
-    @keyframes edSlide { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:none } }
-
-    /* edge emojis */
-    .e { animation: efloat 3s ease-in-out infinite; line-height:1; }
-    @keyframes efloat {
-        0%,100% { transform: translateY(0)    rotate(0deg);  }
-        40%     { transform: translateY(-7px) rotate(-5deg); }
-        70%     { transform: translateY(-3px) rotate(4deg);  }
+    body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.22;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round' opacity='.95'%3E%3Cpath d='M90 28c22 0 32 10 32 28S112 90 90 90 58 74 58 56 68 28 90 28Z'/%3E%3Cpath d='M90 90c22 0 32 10 32 28s-10 34-32 34-32-16-32-34 10-28 32-28Z'/%3E%3Cpath d='M28 90c0-22 10-32 28-32s34 10 34 32-16 32-34 32-28-10-28-32Z'/%3E%3Cpath d='M90 90c0-22 10-32 28-32s34 10 34 32-16 32-34 32-28-10-28-32Z'/%3E%3Cpath d='M58 58c-18 18-18 46 0 64M122 58c18 18 18 46 0 64M58 58c18-18 46-18 64 0M58 122c18 18 46 18 64 0'/%3E%3C/g%3E%3Cg fill='%23ffffff' opacity='.95'%3E%3Ccircle cx='28' cy='28' r='3'/%3E%3Ccircle cx='90' cy='28' r='3'/%3E%3Ccircle cx='152' cy='28' r='3'/%3E%3Ccircle cx='28' cy='90' r='3'/%3E%3Ccircle cx='90' cy='90' r='3'/%3E%3Ccircle cx='152' cy='90' r='3'/%3E%3Ccircle cx='28' cy='152' r='3'/%3E%3Ccircle cx='90' cy='152' r='3'/%3E%3Ccircle cx='152' cy='152' r='3'/%3E%3C/g%3E%3C/svg%3E");
+        background-size: 180px 180px;
+        background-position: center top;
+        z-index: 0;
+    }
+    nav, main { position: relative; z-index: 1; }
+    .task-row { transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease; }
+    .task-row:hover { transform: translateY(-1px); border-color: #fdba74; }
+    .check-btn { transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease; }
+    .quest-card {
+        background: linear-gradient(135deg, rgba(255, 248, 231, 0.98), rgba(255, 237, 213, 0.96));
+        box-shadow: 0 18px 45px rgba(58, 25, 20, 0.24);
+    }
+    .xp-bar { background: rgba(120, 53, 36, 0.14); }
+    .xp-fill { transition: width 0.45s ease; }
+    .star-pop { animation: starPop 0.28s ease; }
+    @keyframes starPop {
+        0% { transform: scale(0.86); }
+        65% { transform: scale(1.08); }
+        100% { transform: scale(1); }
     }
 </style>
 {% endblock %}
 
 {% block content %}
+<script type="application/json" id="task-data">{{ activities_js | safe }}</script>
 
-<!-- Fixed edge emojis — only on screens wide enough to have gutters beside the max-w-3xl content -->
-<div class="hidden lg:block fixed inset-0 pointer-events-none z-10 select-none" aria-hidden="true">
-    <!-- left column -->
-    <span class="e absolute text-2xl" style="left:14px;top:7%;animation-delay:0s;animation-duration:3.1s">🌊</span>
-    <span class="e absolute text-xl"  style="left:7px; top:19%;animation-delay:.6s;animation-duration:2.8s">🐚</span>
-    <span class="e absolute text-2xl" style="left:18px;top:31%;animation-delay:1.3s;animation-duration:3.4s">☀️</span>
-    <span class="e absolute text-lg"  style="left:9px; top:43%;animation-delay:.2s;animation-duration:2.6s">🍦</span>
-    <span class="e absolute text-xl"  style="left:16px;top:55%;animation-delay:1.0s;animation-duration:3.2s">🦀</span>
-    <span class="e absolute text-2xl" style="left:6px; top:67%;animation-delay:.5s;animation-duration:2.9s">🌻</span>
-    <span class="e absolute text-lg"  style="left:20px;top:79%;animation-delay:1.6s;animation-duration:3.5s">🌈</span>
-    <span class="e absolute text-xl"  style="left:11px;top:90%;animation-delay:.9s;animation-duration:3.0s">🐡</span>
-    <!-- right column -->
-    <span class="e absolute text-2xl" style="right:12px;top:12%;animation-delay:.4s;animation-duration:3.3s">🌴</span>
-    <span class="e absolute text-xl"  style="right:22px;top:24%;animation-delay:1.1s;animation-duration:2.7s">🌺</span>
-    <span class="e absolute text-2xl" style="right:8px; top:36%;animation-delay:.8s;animation-duration:3.6s">🦋</span>
-    <span class="e absolute text-lg"  style="right:18px;top:48%;animation-delay:.1s;animation-duration:2.5s">🍉</span>
-    <span class="e absolute text-xl"  style="right:10px;top:60%;animation-delay:1.4s;animation-duration:3.1s">🐠</span>
-    <span class="e absolute text-2xl" style="right:20px;top:72%;animation-delay:.7s;animation-duration:2.9s">⭐</span>
-    <span class="e absolute text-lg"  style="right:6px; top:83%;animation-delay:1.2s;animation-duration:3.4s">🏄</span>
-    <span class="e absolute text-xl"  style="right:15px;top:93%;animation-delay:.3s;animation-duration:3.0s">🌸</span>
-</div>
-
-<!-- Nav -->
-<nav class="sticky top-0 z-30 bg-[#FFFBF0]/90 backdrop-blur-sm border-b border-amber-100 px-5 py-3 flex items-center justify-between">
-    <a href="/" class="text-orange-400 hover:text-orange-600 text-sm font-semibold transition">← Home</a>
-    <span class="pacifico text-xl text-orange-500">☀️ Summer 2026</span>
-    <a href="/logout" class="text-xs text-gray-400 hover:text-gray-600 transition">Logout</a>
+<nav class="sticky top-0 z-30 bg-[#fff8e7]/95 backdrop-blur-sm border-b border-white/40 px-5 py-3 flex items-center justify-between shadow-sm">
+    <a href="/" class="text-[#9f4d35] hover:text-[#783524] text-sm font-semibold transition">Home</a>
+    <span class="pacifico text-xl text-[#9f4d35]">Daily Chores</span>
+    <a href="/logout" class="text-xs text-[#9f4d35]/70 hover:text-[#783524] transition">Logout</a>
 </nav>
 
-<!-- Page title -->
-<div class="text-center pt-10 pb-4 px-4">
-    <h1 class="pacifico text-5xl md:text-6xl text-orange-500 mb-2">My Summer Checklist</h1>
-    <p class="caveat text-2xl text-amber-500">Tap a day · pick activities · watch the summer fill up! 🌊</p>
-</div>
-
-<!-- Global progress bar -->
-<div class="max-w-3xl mx-auto px-4 mb-6">
-    <div class="bg-white rounded-2xl shadow-sm px-5 py-4">
-        <div class="flex items-end justify-between mb-2">
-            <span class="caveat text-xl font-bold text-gray-700">Summer progress</span>
-            <span id="global-pct" class="pacifico text-xl text-orange-500">0%</span>
-        </div>
-        <div class="h-3 bg-gray-100 rounded-full overflow-hidden mb-1.5">
-            <div id="global-bar" class="h-full bg-gradient-to-r from-orange-400 to-amber-400 rounded-full transition-all duration-500" style="width:0%"></div>
-        </div>
-        <p id="global-count" class="caveat text-sm text-gray-400">loading…</p>
-    </div>
-</div>
-
-<!-- Server-side default activities for JS -->
-<script type="application/json" id="checklist-data">{{ activities_js | safe }}</script>
-
-<!-- ── Month sections ─────────────────────────────────────── -->
-{% for month in months %}
-<section class="max-w-3xl mx-auto px-4 mb-14">
-
-    <!-- Month header -->
-    <div class="bg-gradient-to-r {{ month.gradient }} rounded-3xl py-5 px-8 mb-4 shadow-lg text-center">
-        <h2 class="pacifico text-4xl text-white drop-shadow-lg mb-3">{{ month.name }} 2026</h2>
-        <div class="h-2 bg-white/30 rounded-full overflow-hidden mb-1.5 max-w-xs mx-auto">
-            <div id="month-bar-{{ month.num }}" class="h-full bg-white rounded-full transition-all duration-500" style="width:0%"></div>
-        </div>
-        <p id="month-pct-{{ month.num }}" class="caveat text-lg text-white/80">0 of 6 planned</p>
-    </div>
-
-    <!-- Card -->
-    <div class="bg-white rounded-3xl shadow-md overflow-hidden">
-        <div class="flex flex-col md:flex-row md:divide-x divide-gray-100">
-
-            <!-- Mini calendar -->
-            <div class="p-5 md:w-68 shrink-0">
-                <div class="grid grid-cols-7 mb-1">
-                    {% for h in ['Su','Mo','Tu','We','Th','Fr','Sa'] %}
-                    <div class="text-center text-xs font-bold text-gray-400 py-1.5 tracking-wide">{{ h }}</div>
-                    {% endfor %}
-                </div>
-                <div class="grid grid-cols-7 gap-0.5">
-                    {% for week in month.weeks %}{% for day in week %}
-                    {% if day == 0 %}<div class="aspect-square"></div>
-                    {% else %}
-                    <button class="day-btn aspect-square text-sm text-gray-700 flex items-center justify-center"
-                            id="day-{{ month.num }}-{{ day }}"
-                            data-month="{{ month.num }}" data-day="{{ day }}"
-                            onclick="selectDay(+this.dataset.month,+this.dataset.day,this)">{{ day }}</button>
-                    {% endif %}
-                    {% endfor %}{% endfor %}
-                </div>
+<main class="max-w-4xl mx-auto px-4 py-8">
+    <section class="mb-6">
+        <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+            <div>
+                <p class="text-xs font-bold uppercase tracking-wider text-amber-100">Today&apos;s quest board</p>
+                <h1 id="day-title" class="pacifico text-5xl text-white mt-1 drop-shadow-md">Star Quest</h1>
+                <p id="day-subtitle" class="caveat text-2xl text-amber-100 mt-1 drop-shadow-sm">Loading...</p>
             </div>
-
-            <!-- Right panel -->
-            <div class="flex-1 p-6 flex flex-col gap-5">
-
-                <!-- Edit button -->
-                <div class="flex justify-end -mb-2">
-                    <button data-month="{{ month.num }}" onclick="openEditor(+this.dataset.month)"
-                            class="text-xs font-semibold text-orange-400 hover:text-orange-600 transition-colors flex items-center gap-1">
-                        ✏️ Edit activities
-                    </button>
-                </div>
-
-                <!-- Placeholder -->
-                <div id="placeholder-{{ month.num }}" class="flex items-center gap-3 text-gray-400">
-                    <span class="text-2xl">☀️</span>
-                    <span class="caveat text-xl">Tap a day to assign activities</span>
-                </div>
-
-                <!-- Day picker (hidden until day selected) -->
-                <div id="picker-{{ month.num }}" style="display:none" class="flex-col gap-3">
-                    <p id="picker-label-{{ month.num }}" class="caveat text-xl font-bold text-gray-700"></p>
-                    <div class="flex flex-wrap gap-2" id="pills-{{ month.num }}"></div>
-                </div>
-
-                <hr class="border-gray-100">
-
-                <!-- Activity summary rows (JS-rendered) -->
-                <div class="flex flex-col gap-3" id="act-rows-{{ month.num }}"></div>
-
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="changeDay(-1)" class="rounded-xl border border-orange-200 bg-white px-4 py-2 text-sm font-semibold text-orange-600 shadow-sm hover:bg-orange-50">Previous</button>
+                <button type="button" onclick="goToday()" class="rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-orange-600">Today</button>
+                <button type="button" onclick="changeDay(1)" class="rounded-xl border border-orange-200 bg-white px-4 py-2 text-sm font-semibold text-orange-600 shadow-sm hover:bg-orange-50">Next</button>
             </div>
         </div>
-    </div>
+    </section>
 
-    <!-- Edit modal -->
-    <div id="modal-{{ month.num }}" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div class="ed-overlay absolute inset-0 bg-black/30 backdrop-blur-sm"
-             data-month="{{ month.num }}" onclick="closeEditor(+this.dataset.month)"></div>
-        <div class="ed-card relative bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6">
-            <h3 class="pacifico text-2xl text-orange-500 mb-0.5">{{ month.name }} Activities</h3>
-            <p class="caveat text-base text-gray-400 mb-4">Type a name — emoji is suggested automatically ✨</p>
-            <div id="editor-rows-{{ month.num }}" class="flex flex-col gap-2.5 mb-4 max-h-72 overflow-y-auto pr-1"></div>
-            <button data-month="{{ month.num }}" onclick="addEditorRow(+this.dataset.month)"
-                    class="w-full border-2 border-dashed border-orange-200 text-orange-400 caveat text-lg py-2 rounded-xl hover:border-orange-400 hover:text-orange-500 transition mb-5">
-                + Add activity
-            </button>
-            <div class="flex gap-3">
-                <button data-month="{{ month.num }}" onclick="closeEditor(+this.dataset.month)"
-                        class="flex-1 border border-gray-200 text-gray-500 caveat text-lg py-2.5 rounded-xl hover:bg-gray-50 transition">
-                    Cancel
-                </button>
-                <button data-month="{{ month.num }}" onclick="saveEditor(+this.dataset.month)"
-                        class="flex-1 bg-gradient-to-r from-orange-400 to-amber-400 text-white caveat text-lg py-2.5 rounded-xl hover:from-orange-500 hover:to-amber-500 transition shadow-md">
-                    Save
-                </button>
+    <section class="quest-card rounded-2xl border border-white/60 p-5 mb-6">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
+            <div class="flex items-center gap-4">
+                <div class="w-16 h-16 rounded-2xl bg-[#783524] text-white flex items-center justify-center text-3xl font-bold shadow-md">&#9733;</div>
+                <div>
+                    <p class="text-xs font-bold uppercase tracking-wider text-[#9f4d35]">Player rank</p>
+                    <h2 id="rank-title" class="pacifico text-3xl text-[#783524] leading-tight">Rising Star</h2>
+                    <p id="level-text" class="text-sm text-[#9f4d35]/80 font-semibold">Level 1</p>
+                </div>
+            </div>
+            <div class="md:w-80">
+                <div class="flex justify-between text-xs font-bold uppercase tracking-wider text-[#9f4d35] mb-2">
+                    <span>XP to next level</span>
+                    <span id="xp-label">0 / 50</span>
+                </div>
+                <div class="xp-bar h-4 rounded-full overflow-hidden">
+                    <div id="xp-fill" class="xp-fill h-full rounded-full bg-gradient-to-r from-orange-500 to-amber-400" style="width:0%"></div>
+                </div>
             </div>
         </div>
-    </div>
+    </section>
 
-</section>
-{% endfor %}
+    <section class="grid md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-white rounded-2xl border border-orange-100 shadow-sm p-5">
+            <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Today&apos;s loot</p>
+            <div class="mt-2 flex items-baseline gap-2">
+                <span id="today-stars" class="text-4xl font-bold text-orange-500">0</span>
+                <span class="text-2xl text-amber-400">&#9733;</span>
+            </div>
+            <p id="today-progress" class="text-sm text-gray-400 mt-2">0 of 0 quests cleared</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-orange-100 shadow-sm p-5">
+            <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Weekly loot</p>
+            <div class="mt-2 flex items-baseline gap-2">
+                <span id="week-stars" class="text-4xl font-bold text-orange-500">0</span>
+                <span class="text-2xl text-amber-400">&#9733;</span>
+            </div>
+            <p class="text-sm text-gray-400 mt-2">Monday through Sunday</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-orange-100 shadow-sm p-5">
+            <p class="text-xs font-bold uppercase tracking-wider text-gray-400">All time</p>
+            <div class="mt-2 flex items-baseline gap-2">
+                <span id="total-stars" class="text-4xl font-bold text-orange-500">0</span>
+                <span class="text-2xl text-amber-400">&#9733;</span>
+            </div>
+            <p id="streak-text" class="text-sm text-gray-400 mt-2">0 day combo</p>
+        </div>
+    </section>
 
-<!-- Celebration -->
-<div id="celebration" class="hidden max-w-3xl mx-auto px-4 mb-10">
-    <div class="bg-gradient-to-r from-orange-400 via-amber-400 to-yellow-300 rounded-3xl p-8 text-center text-white shadow-xl">
-        <div class="text-5xl mb-3">🎉 🌞 🎉</div>
-        <h3 class="pacifico text-4xl drop-shadow mb-2">Summer is sorted!</h3>
-        <p class="caveat text-2xl text-white/90">Every activity is planned — now go make memories! 🏖️ 🌊 🌴</p>
-    </div>
-</div>
+    <section class="bg-white rounded-2xl border border-orange-100 shadow-md overflow-hidden mb-6">
+        <div class="px-5 py-4 border-b border-orange-100 flex items-center justify-between gap-4">
+            <div>
+                <h2 class="font-bold text-gray-700">Daily quests</h2>
+                <p class="text-sm text-gray-400">Clear the quest list to beat today&apos;s level.</p>
+            </div>
+            <div id="daily-count" class="text-sm font-bold text-orange-500">0 / 0</div>
+        </div>
+        <div id="daily-list" class="divide-y divide-orange-50"></div>
+    </section>
 
-<div class="text-center pb-14 caveat text-xl text-amber-400">Make every day count! 🌞 🏖️ 🌴</div>
+    <section class="bg-white rounded-2xl border border-orange-100 shadow-md overflow-hidden mb-6">
+        <div class="px-5 py-4 border-b border-orange-100 flex items-center justify-between gap-4">
+            <div>
+                <h2 class="font-bold text-gray-700">Weekly bonus quests</h2>
+                <p class="text-sm text-gray-400">Big side quests. Each one gives 5 stars.</p>
+            </div>
+            <div id="weekly-count" class="text-sm font-bold text-orange-500">0 / 0</div>
+        </div>
+        <div id="weekly-list" class="divide-y divide-orange-50"></div>
+    </section>
 
-<!-- ── JavaScript ──────────────────────────────────────────── -->
+    <section class="bg-white rounded-2xl border border-orange-100 shadow-md overflow-hidden mb-6">
+        <div class="px-5 py-4 border-b border-orange-100 flex items-center justify-between gap-4">
+            <div>
+                <h2 class="font-bold text-gray-700">Boss traps</h2>
+                <p class="text-sm text-gray-400">Mark these only if screen time was more than one hour.</p>
+            </div>
+            <div id="penalty-count" class="text-sm font-bold text-red-500">0 stars</div>
+        </div>
+        <div id="penalty-list" class="divide-y divide-orange-50"></div>
+    </section>
+
+    <section id="celebration" class="hidden rounded-2xl bg-gradient-to-r from-orange-400 to-amber-400 p-6 text-center text-white shadow-lg">
+        <div class="text-4xl mb-2">&#9733; &#9733; &#9733;</div>
+        <h2 class="pacifico text-4xl mb-1">Quest complete!</h2>
+        <p class="caveat text-2xl text-white/90">Daily missions cleared. Claim that star power.</p>
+    </section>
+</main>
+
 <script>
-/* ── Constants ─────────────────────────────────────────── */
-const DEFAULT_ACTS = JSON.parse(document.getElementById('checklist-data').textContent);
-const MONTHS    = [6, 7, 8];
-const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-const MON_SHORT = { 6:'Jun', 7:'Jul', 8:'Aug' };
-const MON_FULL  = { 6:'June', 7:'July', 8:'August' };
-const picked    = {};
-
-/* ── HTML helpers ──────────────────────────────────────── */
-function esc(s) {
-    return String(s ?? '')
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-function dateKey(m, d) {
-    return `2026-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-}
-
-/* ── Checklist storage (date → [actName, …]) ───────────── */
-function load() {
-    try { return JSON.parse(localStorage.getItem('summer_checklist_2026') || '{}'); }
-    catch { return {}; }
-}
-function persist(data) {
-    localStorage.setItem('summer_checklist_2026', JSON.stringify(data));
-}
-
-/* ── Activity-list storage (per month) ─────────────────── */
-function loadActStore() {
-    try { return JSON.parse(localStorage.getItem('summer_activities_2026') || '{}'); }
-    catch { return {}; }
-}
-function saveActStore(s) {
-    localStorage.setItem('summer_activities_2026', JSON.stringify(s));
-}
-function getActs(month) {
-    const s = loadActStore();
-    return s[month] ? s[month] : DEFAULT_ACTS.map(a => ({ ...a }));
-}
-function setActs(month, list) {
-    const s = loadActStore();
-    s[month] = list;
-    saveActStore(s);
-}
-
-/* ── Calendar ──────────────────────────────────────────── */
-function selectDay(month, day, btn) {
-    const k = dateKey(month, day);
-    picked[month] = k;
-
-    document.querySelectorAll(`[id^="day-${month}-"]`).forEach(b => b.classList.remove('day-sel'));
-    btn.classList.add('day-sel');
-
-    const dt = new Date(2026, month - 1, day);
-    document.getElementById(`picker-label-${month}`).textContent =
-        `${DAY_NAMES[dt.getDay()]}, ${MON_FULL[month]} ${day}`;
-
-    document.getElementById(`placeholder-${month}`).style.display = 'none';
-    document.getElementById(`picker-${month}`).style.display      = 'flex';
-
-    renderPills(month, load()[k] || []);
-}
-
-function refreshCalendar(month, data) {
-    data = data || load();
-    for (let d = 1; d <= 31; d++) {
-        const btn = document.getElementById(`day-${month}-${d}`);
-        if (btn) btn.classList.toggle('day-planned', !!(data[dateKey(month, d)]?.length));
-    }
-}
-
-/* ── Toggle / remove ───────────────────────────────────── */
-function toggleActivity(month, actName) {
-    const k = picked[month];
-    if (!k) return;
-    const data = load();
-    if (!data[k]) data[k] = [];
-    const i = data[k].indexOf(actName);
-    if (i >= 0) data[k].splice(i, 1); else data[k].push(actName);
-    if (!data[k].length) delete data[k];
-    persist(data);
-    renderPills(month, data[k] || []);
-    refreshCalendar(month, data);
-    renderChips(month, data);
-    updateProgress(data);
-}
-
-function removeDate(k, actName, month) {
-    const data = load();
-    if (!data[k]) return;
-    data[k] = data[k].filter(a => a !== actName);
-    if (!data[k].length) delete data[k];
-    persist(data);
-    if (picked[month] === k) renderPills(month, data[k] || []);
-    refreshCalendar(month, data);
-    renderChips(month, data);
-    updateProgress(data);
-}
-
-/* ── Render pills ──────────────────────────────────────── */
-function renderPills(month, assigned) {
-    assigned = assigned || (picked[month] ? load()[picked[month]] || [] : []);
-    const c = document.getElementById(`pills-${month}`);
-    if (!c) return;
-    c.innerHTML = getActs(month).map(act =>
-        `<button class="act-pill caveat text-lg px-3 py-1 rounded-full ${assigned.includes(act.name) ? 'assigned' : ''}"
-                 data-name="${esc(act.name)}"
-                 onclick="toggleActivity(${month},this.dataset.name)"
-         >${esc(act.emoji)} ${esc(act.name)}</button>`
-    ).join('');
-}
-
-/* ── Render activity summary rows ──────────────────────── */
-function renderActivityRows(month) {
-    const c = document.getElementById(`act-rows-${month}`);
-    if (!c) return;
-    c.innerHTML = getActs(month).map((act, i) =>
-        `<div class="flex items-start gap-2 min-h-7">
-            <div class="thumb-wrap relative shrink-0 w-8 h-8 rounded-lg overflow-hidden bg-orange-50 flex items-center justify-center mt-0.5"
-                 data-name="${esc(act.name)}">
-                <span class="text-base leading-none">${esc(act.emoji)}</span>
-                <img class="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300"
-                     alt="${esc(act.name)}"
-                     onload="this.dataset.loaded='1';this.style.opacity='1'">
-            </div>
-            <span class="caveat text-xl text-gray-700 w-20 shrink-0 leading-7">${esc(act.name)}</span>
-            <div class="flex flex-wrap gap-1.5 pt-0.5" id="chips-${month}-${i}">
-                <span class="text-gray-300 text-sm leading-6">—</span>
-            </div>
-        </div>`
-    ).join('');
-}
-
-/* ── Google Calendar URL ───────────────────────────────── */
-const CAL_ICON = `<svg viewBox="0 0 16 16" width="13" height="13" fill="none"
-    stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-  <rect x="1" y="2.5" width="14" height="12" rx="1.5"/>
-  <line x1="1" y1="6.5" x2="15" y2="6.5"/>
-  <line x1="4.5" y1="1" x2="4.5" y2="4"/>
-  <line x1="11.5" y1="1" x2="11.5" y2="4"/>
-</svg>`;
-
-function gcalUrl(k, name) {
-    const [y, m, d] = k.split('-').map(Number);
-    const end = new Date(y, m - 1, d + 1);
-    const p   = n => String(n).padStart(2, '0');
-    return `https://calendar.google.com/calendar/render?action=TEMPLATE`
-         + `&text=${encodeURIComponent(name)}`
-         + `&dates=${y}${p(m)}${p(d)}/${end.getFullYear()}${p(end.getMonth()+1)}${p(end.getDate())}`;
-}
-
-/* ── Render date chips ─────────────────────────────────── */
-function renderChips(month, data) {
-    data = data || load();
-    const acts   = getActs(month);
-    const prefix = `2026-${String(month).padStart(2,'0')}-`;
-    acts.forEach((act, i) => {
-        const c = document.getElementById(`chips-${month}-${i}`);
-        if (!c) return;
-        const dates = Object.entries(data)
-            .filter(([k, list]) => k.startsWith(prefix) && list.includes(act.name))
-            .map(([k]) => k).sort();
-        if (!dates.length) {
-            c.innerHTML = `<span class="text-gray-300 text-sm leading-6">—</span>`;
-            return;
-        }
-        c.innerHTML = dates.map(k => {
-            const day = parseInt(k.split('-')[2], 10);
-            return `<span class="date-chip bg-orange-100 text-orange-700 caveat text-base px-2 py-0.5 rounded-full leading-5">
-                <span>${MON_SHORT[month]} ${day}</span>
-                <a href="${gcalUrl(k, act.name)}" target="_blank" rel="noopener noreferrer"
-                   class="chip-gcal text-orange-400 transition-colors flex items-center"
-                   title="Add to Google Calendar">${CAL_ICON}</a>
-                <button onclick="removeDate('${k}','${esc(act.name)}',${month})"
-                        class="chip-remove text-orange-300 font-bold transition-colors" title="Remove">×</button>
-            </span>`;
-        }).join('');
-    });
-}
-
-/* ── Progress bars ─────────────────────────────────────── */
-function updateProgress(data) {
-    data = data || load();
-    let totalDone = 0, totalPossible = 0;
-    MONTHS.forEach(month => {
-        const acts   = getActs(month);
-        const prefix = `2026-${String(month).padStart(2,'0')}-`;
-        const seen   = new Set();
-        Object.entries(data).forEach(([k, list]) => {
-            if (k.startsWith(prefix)) list.forEach(a => seen.add(a));
-        });
-        const done  = acts.filter(a => seen.has(a.name)).length;
-        const total = acts.length;
-        totalDone     += done;
-        totalPossible += total;
-        const pct = total ? Math.round(done / total * 100) : 0;
-        const bar  = document.getElementById(`month-bar-${month}`);
-        const txt  = document.getElementById(`month-pct-${month}`);
-        if (bar) bar.style.width  = pct + '%';
-        if (txt) txt.textContent  = `${done} of ${total} planned`;
-    });
-    const pct = totalPossible ? Math.round(totalDone / totalPossible * 100) : 0;
-    const gBar   = document.getElementById('global-bar');
-    const gPct   = document.getElementById('global-pct');
-    const gCount = document.getElementById('global-count');
-    if (gBar)   gBar.style.width   = pct + '%';
-    if (gPct)   gPct.textContent   = pct + '%';
-    if (gCount) gCount.textContent = `${totalDone} of ${totalPossible} activities scheduled`;
-    const cel = document.getElementById('celebration');
-    if (cel) cel.classList.toggle('hidden', totalDone < totalPossible);
-}
-
-/* ── Photo store & fetch ───────────────────────────────── */
-function loadPhotoStore() {
-    try { return JSON.parse(localStorage.getItem('summer_photos_2026') || '{}'); }
-    catch { return {}; }
-}
-function savePhotoStore(data) {
-    localStorage.setItem('summer_photos_2026', JSON.stringify(data));
-}
-
-function applyPhotos(cache) {
-    document.querySelectorAll('.thumb-wrap').forEach(wrap => {
-        const url = cache[wrap.dataset.name];
-        if (!url) return;
-        const img = wrap.querySelector('img');
-        if (!img || img.dataset.loaded) return;
-        img.src = url;
-    });
-}
-
-async function loadPhotos() {
-    const cache = loadPhotoStore();
-    const allNames = new Set();
-    MONTHS.forEach(m => getActs(m).forEach(a => allNames.add(a.name)));
-    const toFetch = [...allNames].filter(n => !cache[n]);
-
-    if (toFetch.length) {
-        try {
-            const res = await fetch(`/checklist/photos?names=${encodeURIComponent(toFetch.join(','))}`);
-            if (res.ok) {
-                Object.assign(cache, await res.json());
-                savePhotoStore(cache);
-            }
-        } catch {}
-    }
-    applyPhotos(cache);
-}
-
-/* ── Emoji auto-suggest ────────────────────────────────── */
-const EMOJI_HINTS = [
-    [/rsm|math|algebra|calcul|geometr/i, '📐'],
-    [/kumon|homework|tutor|worksheet/i,  '📚'],
-    [/danc|ballet|jazz|hip.?hop/i,       '💃'],
-    [/shloka|puja|mantra|prayer|chant/i, '🙏'],
-    [/music|sing|choir|vocal/i,          '🎵'],
-    [/piano|keyboard/i,                  '🎹'],
-    [/guitar/i,  '🎸'], [/drum/i,   '🥁'], [/violin/i, '🎻'],
-    [/swim|pool/i, '🏊'], [/soccer|football/i, '⚽'],
-    [/basket.?ball/i, '🏀'], [/tennis/i, '🎾'],
-    [/art|draw|paint|craft/i, '🎨'], [/read|book/i, '📖'],
-    [/cook|bak|chef|recipe/i, '👩‍🍳'],
-    [/hike|trail|climb/i, '🥾'], [/camp|tent/i, '⛺'],
-    [/beach|ocean|surf/i, '🏖️'], [/run|jog/i, '🏃'],
-    [/bike|cycl/i, '🚴'], [/gym|lift|workout/i, '💪'],
-    [/yoga|meditat/i, '🧘'], [/code|program/i, '💻'],
-    [/write|journal|diary/i, '✏️'], [/movie|film/i, '🎬'],
-    [/game|gaming/i, '🎮'], [/science|lab/i, '🔬'],
-    [/chess/i, '♟️'], [/garden|plant/i, '🌱'],
+const DEFAULT_TASKS = JSON.parse(document.getElementById('task-data').textContent);
+const TASK_KEY = 'daily_chores_tasks_v1';
+const DONE_KEY = 'daily_chores_done_v1';
+const PENALTY_KEY = 'daily_chores_penalties_v1';
+const PENALTIES = [
+    { name: 'iPad watched for more than 1 hour', badge: 'IPAD', stars: 5 },
+    { name: 'TV watched for more than 1 hour', badge: 'TV', stars: 5 }
 ];
-function suggestEmoji(name) {
-    for (const [re, emoji] of EMOJI_HINTS) {
-        if (re.test(name)) return emoji;
+let selectedDate = new Date();
+
+function esc(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function loadJSON(key, fallback) {
+    try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }
+    catch { return fallback; }
+}
+
+function saveJSON(key, data) {
+    localStorage.setItem(key, JSON.stringify(data));
+}
+
+function dateKey(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+function addDays(date, days) {
+    const copy = new Date(date);
+    copy.setDate(copy.getDate() + days);
+    return copy;
+}
+
+function weekStart(date) {
+    const copy = new Date(date);
+    const day = copy.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    copy.setDate(copy.getDate() + diff);
+    copy.setHours(0, 0, 0, 0);
+    return copy;
+}
+
+function getTasks() {
+    const stored = loadJSON(TASK_KEY, null);
+    if (!stored) {
+        const fresh = DEFAULT_TASKS.map(task => ({ ...task }));
+        saveJSON(TASK_KEY, fresh);
+        return fresh;
     }
-    return null;
-}
-
-/* ── Editor ────────────────────────────────────────────── */
-function editorRowHTML(uid, emoji, name) {
-    return `<div class="flex items-center gap-2" id="erow-${uid}">
-        <input id="eemoji-${uid}" type="text" value="${esc(emoji)}"
-               class="w-12 text-center text-xl border border-gray-200 rounded-lg px-1 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300"
-               maxlength="4" placeholder="✨" oninput="onEmojiInput(this)">
-        <input id="ename-${uid}" type="text" value="${esc(name)}"
-               class="flex-1 caveat text-xl border border-gray-200 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300"
-               placeholder="Activity name"
-               oninput="onNameInput(this,document.getElementById('eemoji-${uid}'))">
-        <button onclick="this.closest('[id^=erow]').remove()"
-                class="text-gray-300 hover:text-red-400 hover:bg-red-50 transition w-8 h-8 flex items-center justify-center rounded-lg text-xl font-bold shrink-0">×</button>
-    </div>`;
-}
-
-function renderEditorRows(month) {
-    const c = document.getElementById(`editor-rows-${month}`);
-    if (!c) return;
-    c.innerHTML = getActs(month)
-        .map((act, i) => editorRowHTML(`${month}-${i}`, act.emoji || '✨', act.name))
-        .join('');
-}
-
-function openEditor(month) {
-    renderEditorRows(month);
-    document.getElementById(`modal-${month}`)?.classList.remove('hidden');
-}
-
-function closeEditor(month) {
-    document.getElementById(`modal-${month}`)?.classList.add('hidden');
-}
-
-function addEditorRow(month) {
-    const c = document.getElementById(`editor-rows-${month}`);
-    if (!c) return;
-    const uid = `${month}-${Date.now()}`;
-    const div = document.createElement('div');
-    div.innerHTML = editorRowHTML(uid, '✨', '');
-    c.appendChild(div.firstElementChild);
-    document.getElementById(`ename-${uid}`)?.focus();
-}
-
-function onEmojiInput(el) {
-    // if user clears the field, re-enable auto-suggest; otherwise lock it
-    if (el.value.trim()) el.dataset.userEdited = '1';
-    else                 delete el.dataset.userEdited;
-}
-
-function onNameInput(nameEl, emojiEl) {
-    if (!emojiEl || emojiEl.dataset.userEdited) return;
-    const s = suggestEmoji(nameEl.value);
-    if (s) emojiEl.value = s;
-}
-
-function saveEditor(month) {
-    const c = document.getElementById(`editor-rows-${month}`);
-    if (!c) return;
-
-    const newActs = [];
-    c.querySelectorAll('[id^="erow-"]').forEach(row => {
-        const uid   = row.id.slice(5);              // strip "erow-"
-        const name  = (document.getElementById(`ename-${uid}`)?.value || '').trim();
-        const emoji = (document.getElementById(`eemoji-${uid}`)?.value || '✨').trim();
-        if (name) newActs.push({ name, emoji });
+    const defaultsByName = new Map(DEFAULT_TASKS.map(task => [task.name, task]));
+    let changed = false;
+    const refreshed = stored.map(task => {
+        const defaultTask = defaultsByName.get(task.name);
+        if (!defaultTask) return task;
+        if (
+            task.badge === defaultTask.badge &&
+            task.icon === defaultTask.icon &&
+            task.frequency === defaultTask.frequency &&
+            Number(task.stars || 0) === Number(defaultTask.stars || 0)
+        ) {
+            return task;
+        }
+        changed = true;
+        return { ...task, ...defaultTask };
     });
-
-    // Remove checklist assignments for deleted activities
-    const removed = getActs(month).map(a => a.name)
-                        .filter(n => !newActs.some(a => a.name === n));
-    if (removed.length) {
-        const cdata  = load();
-        const prefix = `2026-${String(month).padStart(2,'0')}-`;
-        Object.entries(cdata).forEach(([k, list]) => {
-            if (!k.startsWith(prefix)) return;
-            cdata[k] = list.filter(a => !removed.includes(a));
-            if (!cdata[k].length) delete cdata[k];
-        });
-        persist(cdata);
+    const names = new Set(refreshed.map(task => task.name));
+    const missing = DEFAULT_TASKS.filter(task => !names.has(task.name));
+    if (missing.length) {
+        const merged = [...refreshed, ...missing.map(task => ({ ...task }))];
+        saveJSON(TASK_KEY, merged);
+        return merged;
     }
-
-    setActs(month, newActs);
-    closeEditor(month);
-
-    const cdata = load();
-    renderPills(month, picked[month] ? cdata[picked[month]] || [] : []);
-    renderActivityRows(month);
-    renderChips(month, cdata);
-    refreshCalendar(month, cdata);
-    updateProgress(cdata);
-    loadPhotos();
+    if (changed) saveJSON(TASK_KEY, refreshed);
+    return refreshed;
 }
 
-/* ── Init ──────────────────────────────────────────────── */
-document.addEventListener('DOMContentLoaded', () => {
-    const data = load();
-    MONTHS.forEach(m => {
-        renderPills(m);
-        renderActivityRows(m);
-        renderChips(m, data);
-        refreshCalendar(m, data);
-    });
-    updateProgress(data);
-    loadPhotos();
-});
+function getDone() {
+    return loadJSON(DONE_KEY, {});
+}
+
+function getPenalties() {
+    return loadJSON(PENALTY_KEY, {});
+}
+
+function taskDoneKey(task, date) {
+    if (task.frequency === 'weekly') return dateKey(weekStart(date));
+    return dateKey(date);
+}
+
+function isDone(task, date, done = getDone()) {
+    const bucket = done[taskDoneKey(task, date)] || [];
+    return bucket.includes(task.name);
+}
+
+function toggleTask(name) {
+    const tasks = getTasks();
+    const task = tasks.find(item => item.name === name);
+    if (!task) return;
+
+    const done = getDone();
+    const key = taskDoneKey(task, selectedDate);
+    if (!done[key]) done[key] = [];
+    const index = done[key].indexOf(name);
+    if (index >= 0) done[key].splice(index, 1);
+    else done[key].push(name);
+    if (!done[key].length) delete done[key];
+    saveJSON(DONE_KEY, done);
+    render();
+}
+
+function isPenaltyMarked(penalty, date, penalties = getPenalties()) {
+    return (penalties[dateKey(date)] || []).includes(penalty.name);
+}
+
+function togglePenalty(name) {
+    const penalties = getPenalties();
+    const key = dateKey(selectedDate);
+    if (!penalties[key]) penalties[key] = [];
+    const index = penalties[key].indexOf(name);
+    if (index >= 0) penalties[key].splice(index, 1);
+    else penalties[key].push(name);
+    if (!penalties[key].length) delete penalties[key];
+    saveJSON(PENALTY_KEY, penalties);
+    render();
+}
+
+function taskRow(task, done) {
+    const stars = Number(task.stars || 1);
+    const starText = stars === 1 ? '1 star' : `${stars} stars`;
+    const icons = {
+        book: '&#128214;',
+        diya: '&#129684;',
+        ghungroo: '&#9672;',
+        lotus: '&#129719;',
+        mandala: '&#10045;',
+        om: '&#128329;&#65039;',
+        raga: '&#9835;',
+        rangoli: '&#10049;',
+        tabla: '&#129345;',
+        thali: '&#127869;&#65039;'
+    };
+    const icon = icons[task.icon] || '&#10045;';
+    const status = done ? 'CLEAR' : esc(task.badge || 'TASK');
+    const frequency = task.frequency === 'weekly' ? 'Weekly bonus quest' : 'Daily quest';
+    return `<button type="button"
+        onclick="toggleTask('${esc(task.name)}')"
+        class="task-row w-full text-left px-5 py-4 flex items-center gap-4 border-l-4 ${done ? 'bg-orange-50 border-orange-400' : 'bg-white border-transparent'}">
+        <span class="check-btn shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold ${done ? 'bg-orange-500 border-orange-500 text-white' : 'border-gray-300 text-transparent'}">&#10003;</span>
+        <span class="shrink-0 w-11 h-11 rounded-xl bg-amber-100 text-2xl flex items-center justify-center text-amber-700">${icon}</span>
+        <span class="shrink-0 min-w-14 rounded-lg bg-orange-100 px-2 py-1 text-center text-[11px] font-bold text-orange-700">${status}</span>
+        <span class="min-w-0 flex-1">
+            <span class="block font-semibold ${done ? 'text-gray-400 line-through' : 'text-gray-800'}">${esc(task.name)}</span>
+            <span class="block text-xs text-gray-400">${frequency} &middot; ${starText}</span>
+        </span>
+        <span class="text-amber-400 font-bold">${stars} &#9733;</span>
+    </button>`;
+}
+
+function penaltyRow(penalty, marked) {
+    return `<button type="button"
+        onclick="togglePenalty('${esc(penalty.name)}')"
+        class="task-row w-full text-left px-5 py-4 flex items-center gap-4 border-l-4 ${marked ? 'bg-red-50 border-red-400' : 'bg-white border-transparent'}">
+        <span class="check-btn shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold ${marked ? 'bg-red-500 border-red-500 text-white' : 'border-gray-300 text-transparent'}">!</span>
+        <span class="shrink-0 min-w-14 rounded-lg bg-red-100 px-2 py-1 text-center text-[11px] font-bold text-red-700">${esc(penalty.badge)}</span>
+        <span class="min-w-0 flex-1">
+            <span class="block font-semibold ${marked ? 'text-red-700' : 'text-gray-800'}">${esc(penalty.name)}</span>
+            <span class="block text-xs text-gray-400">Boss trap &middot; subtracts ${penalty.stars} stars today</span>
+        </span>
+        <span class="text-red-500 font-bold">-${penalty.stars} &#9733;</span>
+    </button>`;
+}
+function earnedStarsForDate(date, done, tasks) {
+    return tasks.reduce((sum, task) => isDone(task, date, done) ? sum + Number(task.stars || 1) : sum, 0);
+}
+
+function penaltyStarsForDate(date, penalties = getPenalties()) {
+    const marked = penalties[dateKey(date)] || [];
+    return PENALTIES
+        .filter(penalty => marked.includes(penalty.name))
+        .reduce((sum, penalty) => sum + Number(penalty.stars || 0), 0);
+}
+
+function scoreForDate(date, done, tasks, penalties = getPenalties()) {
+    return Math.max(0, earnedStarsForDate(date, done, tasks) - penaltyStarsForDate(date, penalties));
+}
+
+function totalStars(done, tasks, penalties) {
+    const keys = new Set([...Object.keys(done), ...Object.keys(penalties)]);
+    return [...keys].reduce((sum, key) => {
+        const [year, month, day] = key.split('-').map(Number);
+        return sum + scoreForDate(new Date(year, month - 1, day), done, tasks, penalties);
+    }, 0);
+}
+
+function levelInfo(stars) {
+    const perLevel = 50;
+    const level = Math.floor(stars / perLevel) + 1;
+    const currentXp = stars % perLevel;
+    const pct = Math.round(currentXp / perLevel * 100);
+    const ranks = [
+        'Rising Star',
+        'Kolam Cadet',
+        'Quest Captain',
+        'Star Scholar',
+        'House Hero',
+        'Legend Mode'
+    ];
+    return {
+        level,
+        currentXp,
+        perLevel,
+        pct,
+        rank: ranks[Math.min(level - 1, ranks.length - 1)]
+    };
+}
+
+function streak(done, tasks) {
+    let count = 0;
+    let cursor = new Date();
+    const daily = tasks.filter(task => task.frequency === 'daily');
+    while (count < 365) {
+        const allDone = daily.length > 0 && daily.every(task => isDone(task, cursor, done));
+        if (!allDone) break;
+        count += 1;
+        cursor = addDays(cursor, -1);
+    }
+    return count;
+}
+
+function render() {
+    const tasks = getTasks();
+    const done = getDone();
+    const penalties = getPenalties();
+    const daily = tasks.filter(task => task.frequency === 'daily');
+    const weekly = tasks.filter(task => task.frequency === 'weekly');
+
+    const title = selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+    document.getElementById('day-subtitle').textContent = title;
+
+    const dailyDone = daily.filter(task => isDone(task, selectedDate, done)).length;
+    const weeklyDone = weekly.filter(task => isDone(task, selectedDate, done)).length;
+    const todayPenaltyStars = penaltyStarsForDate(selectedDate, penalties);
+    const todayStars = scoreForDate(selectedDate, done, tasks, penalties);
+    const start = weekStart(selectedDate);
+    const weekStars = Array.from({ length: 7 }, (_, i) => scoreForDate(addDays(start, i), done, tasks, penalties))
+        .reduce((sum, score) => sum + score, 0);
+
+    document.getElementById('daily-list').innerHTML = daily.map(task => taskRow(task, isDone(task, selectedDate, done))).join('');
+    document.getElementById('weekly-list').innerHTML = weekly.map(task => taskRow(task, isDone(task, selectedDate, done))).join('');
+    document.getElementById('penalty-list').innerHTML = PENALTIES.map(penalty => penaltyRow(penalty, isPenaltyMarked(penalty, selectedDate, penalties))).join('');
+    document.getElementById('daily-count').textContent = `${dailyDone} / ${daily.length}`;
+    document.getElementById('weekly-count').textContent = `${weeklyDone} / ${weekly.length}`;
+    document.getElementById('penalty-count').textContent = todayPenaltyStars ? `-${todayPenaltyStars} stars` : '0 stars';
+    document.getElementById('today-stars').textContent = todayStars;
+    document.getElementById('week-stars').textContent = weekStars;
+    const allTimeStars = totalStars(done, tasks, penalties);
+    const player = levelInfo(allTimeStars);
+    document.getElementById('total-stars').textContent = allTimeStars;
+    document.getElementById('rank-title').textContent = player.rank;
+    document.getElementById('level-text').textContent = `Level ${player.level} - ${allTimeStars} total stars`;
+    document.getElementById('xp-label').textContent = `${player.currentXp} / ${player.perLevel}`;
+    document.getElementById('xp-fill').style.width = `${player.pct}%`;
+    document.getElementById('today-progress').textContent = todayPenaltyStars
+        ? `${dailyDone} of ${daily.length} daily quests cleared, ${todayPenaltyStars} stars reduced`
+        : `${dailyDone} of ${daily.length} daily quests cleared`;
+
+    const currentStreak = streak(done, tasks);
+    document.getElementById('streak-text').textContent = `${currentStreak} day${currentStreak === 1 ? '' : 's'} combo`;
+    document.getElementById('celebration').classList.toggle('hidden', !(daily.length > 0 && dailyDone === daily.length));
+
+    for (const id of ['today-stars', 'week-stars', 'total-stars']) {
+        const el = document.getElementById(id);
+        el.classList.remove('star-pop');
+        void el.offsetWidth;
+        el.classList.add('star-pop');
+    }
+}
+
+function changeDay(days) {
+    selectedDate = addDays(selectedDate, days);
+    render();
+}
+
+function goToday() {
+    selectedDate = new Date();
+    render();
+}
+
+document.addEventListener('DOMContentLoaded', render);
 </script>
-
 {% endblock %}
