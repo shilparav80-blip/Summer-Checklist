@@ -27,27 +27,37 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 _BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
 
-# Vercel vendors its own Jinja2 (via _vendor/) regardless of requirements.txt, and
-# that version has multiple argument-order bugs in get_template → _load_template →
-# loader.load.  The only reliable fix is to replace env.get_template entirely with
-# an implementation that goes straight to loader.get_source → env.compile → from_code,
-# bypassing _load_template and loader.load altogether.
+# Vercel vendors its own Jinja2 (via _vendor/) regardless of requirements.txt.
+# That version has cascading argument-order bugs: get_template → _load_template →
+# loader.load → loader.get_source all pass wrong types to each other.
+# Fix: replace env.get_template with an implementation that reads template files
+# directly from disk using pathlib, then compiles via env.compile + from_code.
+# env.compile and Template.from_code are pure Jinja2 compiler methods — no loader
+# involved — so they are unaffected by the vendored loader bugs.
 import types as _types
 import jinja2 as _jinja2
 
 def _safe_get_template(env_self, name, parent=None, globals=None):
     if isinstance(name, _jinja2.Template):
         return name
+    if not isinstance(name, str):
+        raise _jinja2.TemplateNotFound(repr(name))
     if parent is not None:
-        name = env_self.join_path(name, parent)
-    source, filename, _ = env_self.loader.get_source(env_self, name)
-    code = env_self.compile(source, name, filename)
+        try:
+            name = env_self.join_path(name, parent)
+        except Exception:
+            pass
+    tpl_path = _BASE_DIR / "templates" / name
+    if not tpl_path.is_file():
+        raise _jinja2.TemplateNotFound(name)
+    source = tpl_path.read_text(encoding="utf-8")
+    code = env_self.compile(source, name, str(tpl_path))
     return env_self.template_class.from_code(
-        env_self, code, env_self.make_globals(globals), None
+        env_self, code, dict(getattr(env_self, "globals", {})), None
     )
 
 templates.env.get_template = _types.MethodType(_safe_get_template, templates.env)
-templates.env.cache = None  # disable LRU cache (unhashable-globals bug, belt+suspenders)
+templates.env.cache = None
 
 # Vercel's project root is read-only; /tmp is writable (ephemeral between cold starts).
 # Locally we keep data/ as before.
