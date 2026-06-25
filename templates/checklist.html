@@ -35,8 +35,9 @@
     .act-pill.assigned { background: #f97316; border-color: #f97316; color: white; }
 
     /* ── Date chip in activity list ───────────────────── */
-    .date-chip { transition: background 0.1s, color 0.1s; }
-    .date-chip:hover { background: #fee2e2; color: #ef4444; }
+    .date-chip { display: inline-flex; align-items: center; gap: 4px; }
+    .chip-gcal:hover  { color: #ea580c; }
+    .chip-remove:hover { color: #ef4444; }
 </style>
 {% endblock %}
 
@@ -247,6 +248,25 @@ function refreshCalendar(month, data) {
     }
 }
 
+/* ── Build a Google Calendar "create event" URL ─────────────── */
+function gcalUrl(dateKey, actName) {
+    const [y, m, d] = dateKey.split('-').map(Number);
+    const end = new Date(y, m - 1, d + 1);
+    const pad = n => String(n).padStart(2, '0');
+    const start = `${y}${pad(m)}${pad(d)}`;
+    const stop  = `${end.getFullYear()}${pad(end.getMonth()+1)}${pad(end.getDate())}`;
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE`
+         + `&text=${encodeURIComponent(actName)}&dates=${start}/${stop}`;
+}
+
+const CAL_ICON = `<svg viewBox="0 0 16 16" width="13" height="13" fill="none"
+    stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="1" y="2.5" width="14" height="12" rx="1.5"/>
+  <line x1="1" y1="6.5" x2="15" y2="6.5"/>
+  <line x1="4.5" y1="1" x2="4.5" y2="4"/>
+  <line x1="11.5" y1="1" x2="11.5" y2="4"/>
+</svg>`;
+
 /* ── Render date chips in the activity summary list ─────────── */
 function renderChips(month, data) {
     data = data || load();
@@ -268,11 +288,16 @@ function renderChips(month, data) {
 
         container.innerHTML = dates.map(k => {
             const day = parseInt(k.split('-')[2], 10);
-            return `<button
-                class="date-chip bg-orange-100 text-orange-600 caveat text-base px-2.5 py-0.5 rounded-full leading-5"
-                onclick="removeDate('${k}','${name}',${month})"
-                title="Remove"
-            >${MON_SHORT[month]} ${day} ×</button>`;
+            const url = gcalUrl(k, name);
+            return `<span class="date-chip bg-orange-100 text-orange-700 caveat text-base px-2 py-0.5 rounded-full leading-5">
+                <span>${MON_SHORT[month]} ${day}</span>
+                <a  href="${url}" target="_blank" rel="noopener noreferrer"
+                    class="chip-gcal text-orange-400 transition-colors flex items-center"
+                    title="Add to Google Calendar">${CAL_ICON}</a>
+                <button onclick="removeDate('${k}','${name}',${month})"
+                        class="chip-remove text-orange-300 font-bold transition-colors"
+                        title="Remove">×</button>
+            </span>`;
         }).join('');
     });
 }
