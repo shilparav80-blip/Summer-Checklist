@@ -27,9 +27,19 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 _BASE_DIR = Path(__file__).parent
 templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
 # Vercel vendors its own Jinja2 (via _vendor/) regardless of requirements.txt.
-# That version has a bug where env.globals is used as a dict cache key (unhashable).
-# Disabling the cache sidesteps it entirely; Jinja2 loads templates fresh each call.
+# Bug 1: env.globals dict used as LRU cache key → unhashable. Fix: disable cache.
 templates.env.cache = None
+# Bug 2: vendored _load_template passes (globals_dict, name_str) to loader.load in the
+# wrong order — standard signature is (name_str, globals_dict). Fix: patch to swap back.
+import jinja2.loaders as _jinja2_loaders
+_orig_loader_load = _jinja2_loaders.BaseLoader.load
+
+def _patched_loader_load(self, environment, name, globals=None):
+    if isinstance(name, dict) and isinstance(globals, str):
+        name, globals = globals, name
+    return _orig_loader_load(self, environment, name, globals)
+
+_jinja2_loaders.BaseLoader.load = _patched_loader_load
 
 # Vercel's project root is read-only; /tmp is writable (ephemeral between cold starts).
 # Locally we keep data/ as before.
