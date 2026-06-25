@@ -114,7 +114,6 @@ def cat_style(cat: str) -> dict:
     return CATEGORY_META.get(cat, {"cls": "bg-gray-100 text-gray-600", "emoji": "☀️"})
 
 
-templates.env.globals["cat_style"] = cat_style
 
 
 def load_activities() -> list[dict]:
@@ -211,6 +210,7 @@ async def index(request: Request):
         "completed": completed,
         "total": len(activities),
         "hero_image": hero_image,
+        "cat_style": cat_style,
     })
 
 
