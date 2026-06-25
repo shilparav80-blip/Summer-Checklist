@@ -6,6 +6,7 @@ import random
 import time
 import uuid
 from pathlib import Path
+from typing import Optional
 
 import httpx
 from dotenv import load_dotenv
@@ -34,7 +35,7 @@ DATA_FILE = (
 )
 
 # In-memory fallback used when both /tmp and data/ are unavailable.
-_activities_mem: list[dict] | None = None
+_activities_mem: Optional[list] = None
 
 CATEGORIES = ["Beach", "Outdoors", "Food & Drinks", "Travel", "Social", "Water"]
 
@@ -84,7 +85,7 @@ _PHOTO_QUERIES: dict[str, str] = {
 }
 
 
-async def get_activity_photo(name: str) -> str | None:
+async def get_activity_photo(name: str) -> Optional[str]:
     now = time.time()
     cached = _photo_cache.get(name)
     if cached and cached[1] > now:
@@ -143,7 +144,7 @@ def save_activities(activities: list[dict]) -> None:
         _activities_mem = activities  # filesystem unavailable — hold in memory
 
 
-async def get_hero_image() -> str | None:
+async def get_hero_image() -> Optional[str]:
     now = time.time()
     if _hero_cache["url"] and _hero_cache["expires"] > now:
         return _hero_cache["url"]
