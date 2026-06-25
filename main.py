@@ -23,9 +23,18 @@ SECRET_KEY = os.getenv("SECRET_KEY", "summer-checklist-dev-key-change-me")
 app = FastAPI(title="Summer Checklist")
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
 
-templates = Jinja2Templates(directory="templates")
+_BASE_DIR = Path(__file__).parent
+templates = Jinja2Templates(directory=str(_BASE_DIR / "templates"))
 
-DATA_FILE = Path("data/activities.json")
+# Vercel's project root is read-only; /tmp is writable (ephemeral between cold starts).
+# Locally we keep data/ as before.
+DATA_FILE = (
+    Path("/tmp/activities.json") if os.getenv("VERCEL")
+    else _BASE_DIR / "data" / "activities.json"
+)
+
+# In-memory fallback used when both /tmp and data/ are unavailable.
+_activities_mem: list[dict] | None = None
 
 CATEGORIES = ["Beach", "Outdoors", "Food & Drinks", "Travel", "Social", "Water"]
 
@@ -108,8 +117,14 @@ templates.env.globals["cat_style"] = cat_style
 
 
 def load_activities() -> list[dict]:
+    global _activities_mem
+    if _activities_mem is not None:
+        return _activities_mem
     if DATA_FILE.exists():
-        return json.loads(DATA_FILE.read_text(encoding="utf-8"))
+        try:
+            return json.loads(DATA_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
     activities = [
         {"id": str(uuid.uuid4()), "name": name, "category": cat, "completed": False}
         for name, cat in DEFAULT_ACTIVITIES
@@ -119,8 +134,13 @@ def load_activities() -> list[dict]:
 
 
 def save_activities(activities: list[dict]) -> None:
-    DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
-    DATA_FILE.write_text(json.dumps(activities, indent=2), encoding="utf-8")
+    global _activities_mem
+    try:
+        DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+        DATA_FILE.write_text(json.dumps(activities, indent=2), encoding="utf-8")
+        _activities_mem = None  # disk is authoritative; clear memory copy
+    except OSError:
+        _activities_mem = activities  # filesystem unavailable — hold in memory
 
 
 async def get_hero_image() -> str | None:
