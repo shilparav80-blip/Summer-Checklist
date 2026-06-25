@@ -288,7 +288,13 @@ function renderActivityRows(month) {
     if (!c) return;
     c.innerHTML = getActs(month).map((act, i) =>
         `<div class="flex items-start gap-2 min-h-7">
-            <span class="text-lg shrink-0 leading-7">${esc(act.emoji)}</span>
+            <div class="thumb-wrap relative shrink-0 w-8 h-8 rounded-lg overflow-hidden bg-orange-50 flex items-center justify-center mt-0.5"
+                 data-name="${esc(act.name)}">
+                <span class="text-base leading-none">${esc(act.emoji)}</span>
+                <img class="absolute inset-0 w-full h-full object-cover opacity-0 transition-opacity duration-300"
+                     alt="${esc(act.name)}"
+                     onload="this.dataset.loaded='1';this.style.opacity='1'">
+            </div>
             <span class="caveat text-xl text-gray-700 w-20 shrink-0 leading-7">${esc(act.name)}</span>
             <div class="flex flex-wrap gap-1.5 pt-0.5" id="chips-${month}-${i}">
                 <span class="text-gray-300 text-sm leading-6">—</span>
@@ -374,6 +380,43 @@ function updateProgress(data) {
     if (gCount) gCount.textContent = `${totalDone} of ${totalPossible} activities scheduled`;
     const cel = document.getElementById('celebration');
     if (cel) cel.classList.toggle('hidden', totalDone < totalPossible);
+}
+
+/* ── Photo store & fetch ───────────────────────────────── */
+function loadPhotoStore() {
+    try { return JSON.parse(localStorage.getItem('summer_photos_2026') || '{}'); }
+    catch { return {}; }
+}
+function savePhotoStore(data) {
+    localStorage.setItem('summer_photos_2026', JSON.stringify(data));
+}
+
+function applyPhotos(cache) {
+    document.querySelectorAll('.thumb-wrap').forEach(wrap => {
+        const url = cache[wrap.dataset.name];
+        if (!url) return;
+        const img = wrap.querySelector('img');
+        if (!img || img.dataset.loaded) return;
+        img.src = url;
+    });
+}
+
+async function loadPhotos() {
+    const cache = loadPhotoStore();
+    const allNames = new Set();
+    MONTHS.forEach(m => getActs(m).forEach(a => allNames.add(a.name)));
+    const toFetch = [...allNames].filter(n => !cache[n]);
+
+    if (toFetch.length) {
+        try {
+            const res = await fetch(`/checklist/photos?names=${encodeURIComponent(toFetch.join(','))}`);
+            if (res.ok) {
+                Object.assign(cache, await res.json());
+                savePhotoStore(cache);
+            }
+        } catch {}
+    }
+    applyPhotos(cache);
 }
 
 /* ── Emoji auto-suggest ────────────────────────────────── */
@@ -493,6 +536,7 @@ function saveEditor(month) {
     renderChips(month, cdata);
     refreshCalendar(month, cdata);
     updateProgress(cdata);
+    loadPhotos();
 }
 
 /* ── Init ──────────────────────────────────────────────── */
@@ -505,6 +549,7 @@ document.addEventListener('DOMContentLoaded', () => {
         refreshCalendar(m, data);
     });
     updateProgress(data);
+    loadPhotos();
 });
 </script>
 

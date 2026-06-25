@@ -1,3 +1,4 @@
+import asyncio
 import calendar as _calendar
 import json
 import os
@@ -53,6 +54,50 @@ DEFAULT_ACTIVITIES = [
 ]
 
 _hero_cache: dict = {"url": None, "expires": 0.0}
+
+# Per-activity photo cache:  name -> (url, expires_at)
+_photo_cache: dict[str, tuple[str, float]] = {}
+
+# Better search terms for known activities
+_PHOTO_QUERIES: dict[str, str] = {
+    "rsm":    "children math tutoring classroom",
+    "kumon":  "kids studying worksheets homework",
+    "dance":  "children ballet dance class",
+    "shloka": "kids meditation prayer yoga",
+    "music":  "children music lesson singing",
+    "piano":  "piano practice lesson keys",
+    "swim":   "children swimming pool",
+    "soccer": "kids soccer practice field",
+    "art":    "children painting art class",
+    "read":   "child reading book",
+    "guitar": "kid playing guitar",
+    "coding": "kids coding computer class",
+}
+
+
+async def get_activity_photo(name: str) -> str | None:
+    now = time.time()
+    cached = _photo_cache.get(name)
+    if cached and cached[1] > now:
+        return cached[0]
+    if not PEXELS_API_KEY:
+        return None
+    query = _PHOTO_QUERIES.get(name.lower(), name)
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(
+                "https://api.pexels.com/v1/search",
+                headers={"Authorization": PEXELS_API_KEY},
+                params={"query": query, "per_page": 8, "orientation": "square"},
+            )
+            photos = resp.json().get("photos", [])
+        if not photos:
+            return None
+        url: str = random.choice(photos)["src"]["small"]
+        _photo_cache[name] = (url, now + 3600)
+        return url
+    except Exception:
+        return None
 
 
 def cat_style(cat: str) -> dict:
@@ -219,3 +264,19 @@ async def checklist_page(request: Request):
         "activities": CHECKLIST_ACTIVITIES,
         "activities_js": json.dumps(CHECKLIST_ACTIVITIES),
     })
+
+
+@app.get("/checklist/photos")
+async def checklist_photos(request: Request, names: str = ""):
+    if not request.session.get("authenticated"):
+        raise HTTPException(status_code=403, detail="Not authenticated")
+    name_list = [n.strip() for n in names.split(",") if n.strip()][:20]
+    results: dict[str, str] = {}
+
+    async def _fetch(name: str) -> None:
+        url = await get_activity_photo(name)
+        if url:
+            results[name] = url
+
+    await asyncio.gather(*[_fetch(n) for n in name_list])
+    return JSONResponse(results)
