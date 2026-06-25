@@ -56,6 +56,7 @@
 <script>
     const players = {{ players_js | safe }};
     const defaultTasks = {{ default_tasks_js | safe }};
+    const playerDefaults = {{ player_defaults_js | safe }};
     const iconOptions = ["book", "diya", "ghungroo", "lotus", "mandala", "om", "raga", "rangoli", "tabla", "thali"];
     let activeSlug = Object.keys(players)[0];
     let currentTasks = [];
@@ -176,7 +177,8 @@
     });
 
     document.getElementById("resetTasks").addEventListener("click", () => {
-        currentTasks = defaultTasks.map(task => ({ ...task }));
+        const defaults = playerDefaults[activeSlug] || defaultTasks;
+        currentTasks = defaults.map(task => ({ ...task }));
         renderTasks();
         setStatus("Defaults are ready. Press Save to apply them.");
     });

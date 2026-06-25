@@ -330,6 +330,19 @@ CHECKLIST_ACTIVITIES = [
     {"name": "Laundry", "badge": "WASH", "icon": "diya", "frequency": "weekly", "stars": 5},
 ]
 
+PLAYER_EXTRA_TASKS = {
+    "aarav": [
+        {"name": "PE for 2 hours", "badge": "PE", "icon": "lotus", "frequency": "daily", "stars": 4},
+    ],
+}
+
+
+def player_default_tasks(player_slug: str) -> list[dict]:
+    tasks = [task.copy() for task in CHECKLIST_ACTIVITIES]
+    tasks.extend(task.copy() for task in PLAYER_EXTRA_TASKS.get(player_slug, []))
+    return tasks
+
+
 _cal = _calendar.Calendar(firstweekday=6)  # Sunday-first
 
 _MONTHS = [
@@ -582,6 +595,9 @@ async def admin_page(request: Request):
     return render_template(request, "admin_tasks.html", {
         "players_js": json.dumps(PLAYERS),
         "default_tasks_js": json.dumps(CHECKLIST_ACTIVITIES),
+        "player_defaults_js": json.dumps({
+            slug: player_default_tasks(slug) for slug in PLAYERS
+        }),
     })
 
 
@@ -607,7 +623,7 @@ async def api_admin_player_tasks(player_slug: str, request: Request):
     return JSONResponse({
         "player_slug": player_slug,
         "player_name": player_name,
-        "tasks": profile["state"].get("tasks") or CHECKLIST_ACTIVITIES,
+        "tasks": profile["state"].get("tasks") or player_default_tasks(player_slug),
     })
 
 
@@ -627,7 +643,7 @@ async def api_admin_save_player_tasks(player_slug: str, request: Request):
     saved = await save_profile(player_slug, state)
     return JSONResponse({
         "ok": True,
-        "tasks": saved["state"].get("tasks") or CHECKLIST_ACTIVITIES,
+        "tasks": saved["state"].get("tasks") or player_default_tasks(player_slug),
         "total_stars": saved["total_stars"],
     })
 
@@ -660,8 +676,8 @@ async def checklist_player_page(request: Request, player_slug: str):
     ]
     return render_template(request, "checklist.html", {
         "months": months,
-        "activities": CHECKLIST_ACTIVITIES,
-        "activities_js": json.dumps(CHECKLIST_ACTIVITIES),
+        "activities": player_default_tasks(player_slug),
+        "activities_js": json.dumps(player_default_tasks(player_slug)),
         "player_name": player_name,
         "player_slug": player_slug,
         "players_js": json.dumps(PLAYERS),
