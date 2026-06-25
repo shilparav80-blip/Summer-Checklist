@@ -56,13 +56,35 @@
     <p class="caveat text-2xl text-amber-500">Tap a day · pick your activities · watch the summer fill up! 🌊</p>
 </div>
 
+<!-- ── Global progress bar ──────────────────────────────────── -->
+<div class="max-w-3xl mx-auto px-4 mb-6">
+    <div class="bg-white rounded-2xl shadow-sm px-5 py-4">
+        <div class="flex items-end justify-between mb-2">
+            <span class="caveat text-xl font-bold text-gray-700">Summer progress</span>
+            <span id="global-pct" class="pacifico text-xl text-orange-500">0%</span>
+        </div>
+        <div class="h-3 bg-gray-100 rounded-full overflow-hidden mb-1.5">
+            <div id="global-bar"
+                 class="h-full bg-gradient-to-r from-orange-400 to-amber-400 rounded-full transition-all duration-500"
+                 style="width:0%"></div>
+        </div>
+        <p id="global-count" class="caveat text-sm text-gray-400">0 of 18 activities scheduled</p>
+    </div>
+</div>
+
 <!-- ── Month sections ─────────────────────────────────────── -->
 {% for month in months %}
 <section class="max-w-3xl mx-auto px-4 mb-14">
 
     <!-- Month header -->
     <div class="bg-gradient-to-r {{ month.gradient }} rounded-3xl py-5 px-8 mb-4 shadow-lg text-center">
-        <h2 class="pacifico text-4xl text-white drop-shadow-lg">{{ month.name }} 2026</h2>
+        <h2 class="pacifico text-4xl text-white drop-shadow-lg mb-3">{{ month.name }} 2026</h2>
+        <div class="h-2 bg-white/30 rounded-full overflow-hidden mb-1.5 max-w-xs mx-auto">
+            <div id="month-bar-{{ month.num }}"
+                 class="h-full bg-white rounded-full transition-all duration-500"
+                 style="width:0%"></div>
+        </div>
+        <p id="month-pct-{{ month.num }}" class="caveat text-lg text-white/80">0 of 6 planned</p>
     </div>
 
     <!-- Card -->
@@ -138,6 +160,15 @@
     </div>
 </section>
 {% endfor %}
+
+<!-- ── Celebration (shown when all 18 slots filled) ──────────── -->
+<div id="celebration" class="hidden max-w-3xl mx-auto px-4 mb-10">
+    <div class="bg-gradient-to-r from-orange-400 via-amber-400 to-yellow-300 rounded-3xl p-8 text-center text-white shadow-xl">
+        <div class="text-5xl mb-3">🎉 🌞 🎉</div>
+        <h3 class="pacifico text-4xl drop-shadow mb-2">Summer is sorted!</h3>
+        <p class="caveat text-2xl text-white/90">Every activity is planned — now go make memories! 🏖️ 🌊 🌴</p>
+    </div>
+</div>
 
 <div class="text-center pb-14 caveat text-xl text-amber-400">Make every day count! 🌞 🏖️ 🌴</div>
 
@@ -217,6 +248,7 @@ function toggleActivity(month, actName) {
 
     refreshCalendar(month, data);
     renderChips(month, data);
+    updateProgress(data);
 }
 
 /* ── Remove a date chip (tap date × next to activity) ──────── */
@@ -236,6 +268,7 @@ function removeDate(k, actName, month) {
 
     refreshCalendar(month, data);
     renderChips(month, data);
+    updateProgress(data);
 }
 
 /* ── Highlight calendar days that have planned activities ─── */
@@ -302,13 +335,48 @@ function renderChips(month, data) {
     });
 }
 
-/* ── Init: restore calendar highlights & chips on load ──────── */
+/* ── Recalculate and render all progress indicators ─────────── */
+function updateProgress(data) {
+    data = data || load();
+    let totalDone = 0;
+    const totalPossible = ACT_NAMES.length * MONTHS.length;
+
+    MONTHS.forEach(month => {
+        const prefix = `2026-${String(month).padStart(2,'0')}-`;
+        const seen   = new Set();
+        Object.entries(data).forEach(([k, acts]) => {
+            if (k.startsWith(prefix)) acts.forEach(a => seen.add(a));
+        });
+        const done = seen.size;
+        const pct  = Math.round(done / ACT_NAMES.length * 100);
+        totalDone += done;
+
+        const bar  = document.getElementById(`month-bar-${month}`);
+        const text = document.getElementById(`month-pct-${month}`);
+        if (bar)  bar.style.width  = pct + '%';
+        if (text) text.textContent = `${done} of ${ACT_NAMES.length} planned`;
+    });
+
+    const pct    = totalPossible ? Math.round(totalDone / totalPossible * 100) : 0;
+    const gBar   = document.getElementById('global-bar');
+    const gPct   = document.getElementById('global-pct');
+    const gCount = document.getElementById('global-count');
+    if (gBar)   gBar.style.width   = pct + '%';
+    if (gPct)   gPct.textContent   = pct + '%';
+    if (gCount) gCount.textContent = `${totalDone} of ${totalPossible} activities scheduled`;
+
+    const cel = document.getElementById('celebration');
+    if (cel) cel.classList.toggle('hidden', totalDone < totalPossible);
+}
+
+/* ── Init: restore calendar highlights, chips & progress ──────── */
 document.addEventListener('DOMContentLoaded', () => {
     const data = load();
     MONTHS.forEach(m => {
         refreshCalendar(m, data);
         renderChips(m, data);
     });
+    updateProgress(data);
 });
 </script>
 
