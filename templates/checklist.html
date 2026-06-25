@@ -4,40 +4,27 @@
 <style>
     body { background-color: #FFFBF0 !important; background-image: none !important; }
 
-    /* ── Calendar day states ───────────────────────────── */
-    .day-btn {
-        transition: background 0.1s, color 0.1s;
-        border-radius: 0.5rem;
-    }
-    .day-btn:hover:not(.day-sel) { background: #fed7aa; }
+    .day-btn { transition: background 0.1s, color 0.1s; border-radius: 0.5rem; }
+    .day-btn:hover:not(.day-sel)   { background: #fed7aa; }
+    .day-planned:not(.day-sel)     { background: #ffedd5; color: #9a3412; font-weight: 600; }
+    .day-sel                        { background: #f97316 !important; color: white !important; font-weight: 700; }
 
-    /* day has something planned — warm amber glow */
-    .day-planned:not(.day-sel) {
-        background: #ffedd5;
-        color: #9a3412;
-        font-weight: 600;
-    }
-
-    /* selected day */
-    .day-sel {
-        background: #f97316 !important;
-        color: white !important;
-        font-weight: 700;
-    }
-
-    /* ── Activity pill in the day picker ──────────────── */
     .act-pill {
-        border: 2px solid #fed7aa;
-        color: #78716c;
+        border: 2px solid #fed7aa; color: #78716c;
         transition: background 0.12s, color 0.12s, border-color 0.12s, transform 0.08s;
     }
     .act-pill:hover    { border-color: #f97316; color: #f97316; transform: scale(1.04); }
     .act-pill.assigned { background: #f97316; border-color: #f97316; color: white; }
 
-    /* ── Date chip in activity list ───────────────────── */
-    .date-chip { display: inline-flex; align-items: center; gap: 4px; }
-    .chip-gcal:hover  { color: #ea580c; }
+    .date-chip      { display: inline-flex; align-items: center; gap: 4px; }
+    .chip-gcal:hover   { color: #ea580c; }
     .chip-remove:hover { color: #ef4444; }
+
+    /* editor modal */
+    .ed-overlay { animation: edFade  0.15s ease; }
+    .ed-card    { animation: edSlide 0.18s ease; }
+    @keyframes edFade  { from { opacity:0 } to { opacity:1 } }
+    @keyframes edSlide { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:none } }
 </style>
 {% endblock %}
 
@@ -53,10 +40,10 @@
 <!-- Page title -->
 <div class="text-center pt-10 pb-4 px-4">
     <h1 class="pacifico text-5xl md:text-6xl text-orange-500 mb-2">My Summer Checklist</h1>
-    <p class="caveat text-2xl text-amber-500">Tap a day · pick your activities · watch the summer fill up! 🌊</p>
+    <p class="caveat text-2xl text-amber-500">Tap a day · pick activities · watch the summer fill up! 🌊</p>
 </div>
 
-<!-- ── Global progress bar ──────────────────────────────────── -->
+<!-- Global progress bar -->
 <div class="max-w-3xl mx-auto px-4 mb-6">
     <div class="bg-white rounded-2xl shadow-sm px-5 py-4">
         <div class="flex items-end justify-between mb-2">
@@ -64,13 +51,14 @@
             <span id="global-pct" class="pacifico text-xl text-orange-500">0%</span>
         </div>
         <div class="h-3 bg-gray-100 rounded-full overflow-hidden mb-1.5">
-            <div id="global-bar"
-                 class="h-full bg-gradient-to-r from-orange-400 to-amber-400 rounded-full transition-all duration-500"
-                 style="width:0%"></div>
+            <div id="global-bar" class="h-full bg-gradient-to-r from-orange-400 to-amber-400 rounded-full transition-all duration-500" style="width:0%"></div>
         </div>
-        <p id="global-count" class="caveat text-sm text-gray-400">0 of 18 activities scheduled</p>
+        <p id="global-count" class="caveat text-sm text-gray-400">loading…</p>
     </div>
 </div>
+
+<!-- Server-side default activities for JS -->
+<script type="application/json" id="checklist-data">{{ activities_js | safe }}</script>
 
 <!-- ── Month sections ─────────────────────────────────────── -->
 {% for month in months %}
@@ -80,9 +68,7 @@
     <div class="bg-gradient-to-r {{ month.gradient }} rounded-3xl py-5 px-8 mb-4 shadow-lg text-center">
         <h2 class="pacifico text-4xl text-white drop-shadow-lg mb-3">{{ month.name }} 2026</h2>
         <div class="h-2 bg-white/30 rounded-full overflow-hidden mb-1.5 max-w-xs mx-auto">
-            <div id="month-bar-{{ month.num }}"
-                 class="h-full bg-white rounded-full transition-all duration-500"
-                 style="width:0%"></div>
+            <div id="month-bar-{{ month.num }}" class="h-full bg-white rounded-full transition-all duration-500" style="width:0%"></div>
         </div>
         <p id="month-pct-{{ month.num }}" class="caveat text-lg text-white/80">0 of 6 planned</p>
     </div>
@@ -91,77 +77,87 @@
     <div class="bg-white rounded-3xl shadow-md overflow-hidden">
         <div class="flex flex-col md:flex-row md:divide-x divide-gray-100">
 
-            <!-- ── Mini calendar ──────────────────────────── -->
+            <!-- Mini calendar -->
             <div class="p-5 md:w-68 shrink-0">
-                <!-- Column headers -->
                 <div class="grid grid-cols-7 mb-1">
                     {% for h in ['Su','Mo','Tu','We','Th','Fr','Sa'] %}
                     <div class="text-center text-xs font-bold text-gray-400 py-1.5 tracking-wide">{{ h }}</div>
                     {% endfor %}
                 </div>
-                <!-- Day grid -->
                 <div class="grid grid-cols-7 gap-0.5">
-                    {% for week in month.weeks %}
-                    {% for day in week %}
-                    {% if day == 0 %}
-                    <div class="aspect-square"></div>
+                    {% for week in month.weeks %}{% for day in week %}
+                    {% if day == 0 %}<div class="aspect-square"></div>
                     {% else %}
-                    <button
-                        class="day-btn aspect-square text-sm text-gray-700 flex items-center justify-center"
-                        id="day-{{ month.num }}-{{ day }}"
-                        onclick="selectDay({{ month.num }}, {{ day }}, this)"
-                    >{{ day }}</button>
+                    <button class="day-btn aspect-square text-sm text-gray-700 flex items-center justify-center"
+                            id="day-{{ month.num }}-{{ day }}"
+                            data-month="{{ month.num }}" data-day="{{ day }}"
+                            onclick="selectDay(+this.dataset.month,+this.dataset.day,this)">{{ day }}</button>
                     {% endif %}
-                    {% endfor %}
-                    {% endfor %}
+                    {% endfor %}{% endfor %}
                 </div>
             </div>
 
-            <!-- ── Right panel ────────────────────────────── -->
+            <!-- Right panel -->
             <div class="flex-1 p-6 flex flex-col gap-5">
 
-                <!-- Placeholder (shown until a day is tapped) -->
+                <!-- Edit button -->
+                <div class="flex justify-end -mb-2">
+                    <button data-month="{{ month.num }}" onclick="openEditor(+this.dataset.month)"
+                            class="text-xs font-semibold text-orange-400 hover:text-orange-600 transition-colors flex items-center gap-1">
+                        ✏️ Edit activities
+                    </button>
+                </div>
+
+                <!-- Placeholder -->
                 <div id="placeholder-{{ month.num }}" class="flex items-center gap-3 text-gray-400">
                     <span class="text-2xl">☀️</span>
                     <span class="caveat text-xl">Tap a day to assign activities</span>
                 </div>
 
-                <!-- Day picker (hidden until a day is tapped) -->
+                <!-- Day picker (hidden until day selected) -->
                 <div id="picker-{{ month.num }}" style="display:none" class="flex-col gap-3">
                     <p id="picker-label-{{ month.num }}" class="caveat text-xl font-bold text-gray-700"></p>
-                    <div class="flex flex-wrap gap-2">
-                        {% for act in activities %}
-                        <button
-                            class="act-pill caveat text-lg px-3 py-1 rounded-full"
-                            id="pill-{{ month.num }}-{{ act.name }}"
-                            onclick="toggleActivity({{ month.num }}, '{{ act.name }}')"
-                        >{{ act.emoji }} {{ act.name }}</button>
-                        {% endfor %}
-                    </div>
+                    <div class="flex flex-wrap gap-2" id="pills-{{ month.num }}"></div>
                 </div>
 
                 <hr class="border-gray-100">
 
-                <!-- Activity summary list (always visible) -->
-                <div class="flex flex-col gap-3">
-                    {% for act in activities %}
-                    <div class="flex items-start gap-2 min-h-7">
-                        <span class="text-lg shrink-0 leading-7">{{ act.emoji }}</span>
-                        <span class="caveat text-xl text-gray-700 w-20 shrink-0 leading-7">{{ act.name }}</span>
-                        <div class="flex flex-wrap gap-1.5 pt-0.5" id="chips-{{ month.num }}-{{ act.name }}">
-                            <span class="text-gray-300 text-sm leading-6">—</span>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
+                <!-- Activity summary rows (JS-rendered) -->
+                <div class="flex flex-col gap-3" id="act-rows-{{ month.num }}"></div>
 
-            </div><!-- /right panel -->
+            </div>
         </div>
     </div>
+
+    <!-- Edit modal -->
+    <div id="modal-{{ month.num }}" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="ed-overlay absolute inset-0 bg-black/30 backdrop-blur-sm"
+             data-month="{{ month.num }}" onclick="closeEditor(+this.dataset.month)"></div>
+        <div class="ed-card relative bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6">
+            <h3 class="pacifico text-2xl text-orange-500 mb-0.5">{{ month.name }} Activities</h3>
+            <p class="caveat text-base text-gray-400 mb-4">Type a name — emoji is suggested automatically ✨</p>
+            <div id="editor-rows-{{ month.num }}" class="flex flex-col gap-2.5 mb-4 max-h-72 overflow-y-auto pr-1"></div>
+            <button data-month="{{ month.num }}" onclick="addEditorRow(+this.dataset.month)"
+                    class="w-full border-2 border-dashed border-orange-200 text-orange-400 caveat text-lg py-2 rounded-xl hover:border-orange-400 hover:text-orange-500 transition mb-5">
+                + Add activity
+            </button>
+            <div class="flex gap-3">
+                <button data-month="{{ month.num }}" onclick="closeEditor(+this.dataset.month)"
+                        class="flex-1 border border-gray-200 text-gray-500 caveat text-lg py-2.5 rounded-xl hover:bg-gray-50 transition">
+                    Cancel
+                </button>
+                <button data-month="{{ month.num }}" onclick="saveEditor(+this.dataset.month)"
+                        class="flex-1 bg-gradient-to-r from-orange-400 to-amber-400 text-white caveat text-lg py-2.5 rounded-xl hover:from-orange-500 hover:to-amber-500 transition shadow-md">
+                    Save
+                </button>
+            </div>
+        </div>
+    </div>
+
 </section>
 {% endfor %}
 
-<!-- ── Celebration (shown when all 18 slots filled) ──────────── -->
+<!-- Celebration -->
 <div id="celebration" class="hidden max-w-3xl mx-auto px-4 mb-10">
     <div class="bg-gradient-to-r from-orange-400 via-amber-400 to-yellow-300 rounded-3xl p-8 text-center text-white shadow-xl">
         <div class="text-5xl mb-3">🎉 🌞 🎉</div>
@@ -172,23 +168,27 @@
 
 <div class="text-center pb-14 caveat text-xl text-amber-400">Make every day count! 🌞 🏖️ 🌴</div>
 
-<!-- Server data passed to JS without confusing the JS parser -->
-<script type="application/json" id="checklist-data">{{ activities_js | safe }}</script>
-
 <!-- ── JavaScript ──────────────────────────────────────────── -->
 <script>
-const ACTIVITIES = JSON.parse(document.getElementById('checklist-data').textContent);
-const ACT_EMOJI  = Object.fromEntries(ACTIVITIES.map(a => [a.name, a.emoji]));
-const ACT_NAMES  = ACTIVITIES.map(a => a.name);
-
+/* ── Constants ─────────────────────────────────────────── */
+const DEFAULT_ACTS = JSON.parse(document.getElementById('checklist-data').textContent);
+const MONTHS    = [6, 7, 8];
 const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const MON_SHORT = { 6:'Jun', 7:'Jul', 8:'Aug' };
 const MON_FULL  = { 6:'June', 7:'July', 8:'August' };
-const MONTHS    = [6, 7, 8];
+const picked    = {};
 
-const picked = {};   // { monthNum: "2026-MM-DD" }
+/* ── HTML helpers ──────────────────────────────────────── */
+function esc(s) {
+    return String(s ?? '')
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function dateKey(m, d) {
+    return `2026-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
 
-/* ── Storage ──────────────────────────────────────────────── */
+/* ── Checklist storage (date → [actName, …]) ───────────── */
 function load() {
     try { return JSON.parse(localStorage.getItem('summer_checklist_2026') || '{}'); }
     catch { return {}; }
@@ -197,101 +197,107 @@ function persist(data) {
     localStorage.setItem('summer_checklist_2026', JSON.stringify(data));
 }
 
-function dateKey(m, d) {
-    return `2026-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+/* ── Activity-list storage (per month) ─────────────────── */
+function loadActStore() {
+    try { return JSON.parse(localStorage.getItem('summer_activities_2026') || '{}'); }
+    catch { return {}; }
+}
+function saveActStore(s) {
+    localStorage.setItem('summer_activities_2026', JSON.stringify(s));
+}
+function getActs(month) {
+    const s = loadActStore();
+    return s[month] ? s[month] : DEFAULT_ACTS.map(a => ({ ...a }));
+}
+function setActs(month, list) {
+    const s = loadActStore();
+    s[month] = list;
+    saveActStore(s);
 }
 
-/* ── Select a day ─────────────────────────────────────────── */
+/* ── Calendar ──────────────────────────────────────────── */
 function selectDay(month, day, btn) {
     const k = dateKey(month, day);
     picked[month] = k;
 
-    // Highlight selected button (keep planned colour on others)
     document.querySelectorAll(`[id^="day-${month}-"]`).forEach(b => b.classList.remove('day-sel'));
     btn.classList.add('day-sel');
 
-    // Day label e.g. "Monday, June 16"
     const dt = new Date(2026, month - 1, day);
     document.getElementById(`picker-label-${month}`).textContent =
         `${DAY_NAMES[dt.getDay()]}, ${MON_FULL[month]} ${day}`;
 
-    // Swap placeholder → picker
     document.getElementById(`placeholder-${month}`).style.display = 'none';
-    document.getElementById(`picker-${month}`).style.display       = 'flex';
+    document.getElementById(`picker-${month}`).style.display      = 'flex';
 
-    // Sync pill states with saved data
-    const assigned = load()[k] || [];
-    ACT_NAMES.forEach(name => {
-        const pill = document.getElementById(`pill-${month}-${name}`);
-        if (pill) pill.classList.toggle('assigned', assigned.includes(name));
-    });
+    renderPills(month, load()[k] || []);
 }
 
-/* ── Toggle an activity for the currently-selected day ────── */
-function toggleActivity(month, actName) {
-    const k = picked[month];
-    if (!k) return;
-
-    const data = load();
-    if (!data[k]) data[k] = [];
-
-    const idx = data[k].indexOf(actName);
-    if (idx >= 0) data[k].splice(idx, 1);
-    else          data[k].push(actName);
-
-    if (!data[k].length) delete data[k];
-    persist(data);
-
-    // Sync pill
-    const pill = document.getElementById(`pill-${month}-${actName}`);
-    if (pill) pill.classList.toggle('assigned', (data[k] || []).includes(actName));
-
-    refreshCalendar(month, data);
-    renderChips(month, data);
-    updateProgress(data);
-}
-
-/* ── Remove a date chip (tap date × next to activity) ──────── */
-function removeDate(k, actName, month) {
-    const data = load();
-    if (!data[k]) return;
-
-    data[k] = data[k].filter(a => a !== actName);
-    if (!data[k].length) delete data[k];
-    persist(data);
-
-    // If this date is in the picker, un-assign the pill
-    if (picked[month] === k) {
-        const pill = document.getElementById(`pill-${month}-${actName}`);
-        if (pill) pill.classList.remove('assigned');
-    }
-
-    refreshCalendar(month, data);
-    renderChips(month, data);
-    updateProgress(data);
-}
-
-/* ── Highlight calendar days that have planned activities ─── */
 function refreshCalendar(month, data) {
     data = data || load();
     for (let d = 1; d <= 31; d++) {
         const btn = document.getElementById(`day-${month}-${d}`);
-        if (!btn) continue;
-        btn.classList.toggle('day-planned', !!(data[dateKey(month, d)]?.length));
+        if (btn) btn.classList.toggle('day-planned', !!(data[dateKey(month, d)]?.length));
     }
 }
 
-/* ── Build a Google Calendar "create event" URL ─────────────── */
-function gcalUrl(dateKey, actName) {
-    const [y, m, d] = dateKey.split('-').map(Number);
-    const end = new Date(y, m - 1, d + 1);
-    const pad = n => String(n).padStart(2, '0');
-    const start = `${y}${pad(m)}${pad(d)}`;
-    const stop  = `${end.getFullYear()}${pad(end.getMonth()+1)}${pad(end.getDate())}`;
-    return `https://calendar.google.com/calendar/render?action=TEMPLATE`
-         + `&text=${encodeURIComponent(actName)}&dates=${start}/${stop}`;
+/* ── Toggle / remove ───────────────────────────────────── */
+function toggleActivity(month, actName) {
+    const k = picked[month];
+    if (!k) return;
+    const data = load();
+    if (!data[k]) data[k] = [];
+    const i = data[k].indexOf(actName);
+    if (i >= 0) data[k].splice(i, 1); else data[k].push(actName);
+    if (!data[k].length) delete data[k];
+    persist(data);
+    renderPills(month, data[k] || []);
+    refreshCalendar(month, data);
+    renderChips(month, data);
+    updateProgress(data);
 }
 
+function removeDate(k, actName, month) {
+    const data = load();
+    if (!data[k]) return;
+    data[k] = data[k].filter(a => a !== actName);
+    if (!data[k].length) delete data[k];
+    persist(data);
+    if (picked[month] === k) renderPills(month, data[k] || []);
+    refreshCalendar(month, data);
+    renderChips(month, data);
+    updateProgress(data);
+}
+
+/* ── Render pills ──────────────────────────────────────── */
+function renderPills(month, assigned) {
+    assigned = assigned || (picked[month] ? load()[picked[month]] || [] : []);
+    const c = document.getElementById(`pills-${month}`);
+    if (!c) return;
+    c.innerHTML = getActs(month).map(act =>
+        `<button class="act-pill caveat text-lg px-3 py-1 rounded-full ${assigned.includes(act.name) ? 'assigned' : ''}"
+                 data-name="${esc(act.name)}"
+                 onclick="toggleActivity(${month},this.dataset.name)"
+         >${esc(act.emoji)} ${esc(act.name)}</button>`
+    ).join('');
+}
+
+/* ── Render activity summary rows ──────────────────────── */
+function renderActivityRows(month) {
+    const c = document.getElementById(`act-rows-${month}`);
+    if (!c) return;
+    c.innerHTML = getActs(month).map((act, i) =>
+        `<div class="flex items-start gap-2 min-h-7">
+            <span class="text-lg shrink-0 leading-7">${esc(act.emoji)}</span>
+            <span class="caveat text-xl text-gray-700 w-20 shrink-0 leading-7">${esc(act.name)}</span>
+            <div class="flex flex-wrap gap-1.5 pt-0.5" id="chips-${month}-${i}">
+                <span class="text-gray-300 text-sm leading-6">—</span>
+            </div>
+        </div>`
+    ).join('');
+}
+
+/* ── Google Calendar URL ───────────────────────────────── */
 const CAL_ICON = `<svg viewBox="0 0 16 16" width="13" height="13" fill="none"
     stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
   <rect x="1" y="2.5" width="14" height="12" rx="1.5"/>
@@ -300,81 +306,203 @@ const CAL_ICON = `<svg viewBox="0 0 16 16" width="13" height="13" fill="none"
   <line x1="11.5" y1="1" x2="11.5" y2="4"/>
 </svg>`;
 
-/* ── Render date chips in the activity summary list ─────────── */
+function gcalUrl(k, name) {
+    const [y, m, d] = k.split('-').map(Number);
+    const end = new Date(y, m - 1, d + 1);
+    const p   = n => String(n).padStart(2, '0');
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE`
+         + `&text=${encodeURIComponent(name)}`
+         + `&dates=${y}${p(m)}${p(d)}/${end.getFullYear()}${p(end.getMonth()+1)}${p(end.getDate())}`;
+}
+
+/* ── Render date chips ─────────────────────────────────── */
 function renderChips(month, data) {
     data = data || load();
+    const acts   = getActs(month);
     const prefix = `2026-${String(month).padStart(2,'0')}-`;
-
-    ACT_NAMES.forEach(name => {
-        const container = document.getElementById(`chips-${month}-${name}`);
-        if (!container) return;
-
+    acts.forEach((act, i) => {
+        const c = document.getElementById(`chips-${month}-${i}`);
+        if (!c) return;
         const dates = Object.entries(data)
-            .filter(([k, acts]) => k.startsWith(prefix) && acts.includes(name))
-            .map(([k]) => k)
-            .sort();
-
+            .filter(([k, list]) => k.startsWith(prefix) && list.includes(act.name))
+            .map(([k]) => k).sort();
         if (!dates.length) {
-            container.innerHTML = `<span class="text-gray-300 text-sm leading-6">—</span>`;
+            c.innerHTML = `<span class="text-gray-300 text-sm leading-6">—</span>`;
             return;
         }
-
-        container.innerHTML = dates.map(k => {
+        c.innerHTML = dates.map(k => {
             const day = parseInt(k.split('-')[2], 10);
-            const url = gcalUrl(k, name);
             return `<span class="date-chip bg-orange-100 text-orange-700 caveat text-base px-2 py-0.5 rounded-full leading-5">
                 <span>${MON_SHORT[month]} ${day}</span>
-                <a  href="${url}" target="_blank" rel="noopener noreferrer"
-                    class="chip-gcal text-orange-400 transition-colors flex items-center"
-                    title="Add to Google Calendar">${CAL_ICON}</a>
-                <button onclick="removeDate('${k}','${name}',${month})"
-                        class="chip-remove text-orange-300 font-bold transition-colors"
-                        title="Remove">×</button>
+                <a href="${gcalUrl(k, act.name)}" target="_blank" rel="noopener noreferrer"
+                   class="chip-gcal text-orange-400 transition-colors flex items-center"
+                   title="Add to Google Calendar">${CAL_ICON}</a>
+                <button onclick="removeDate('${k}','${esc(act.name)}',${month})"
+                        class="chip-remove text-orange-300 font-bold transition-colors" title="Remove">×</button>
             </span>`;
         }).join('');
     });
 }
 
-/* ── Recalculate and render all progress indicators ─────────── */
+/* ── Progress bars ─────────────────────────────────────── */
 function updateProgress(data) {
     data = data || load();
-    let totalDone = 0;
-    const totalPossible = ACT_NAMES.length * MONTHS.length;
-
+    let totalDone = 0, totalPossible = 0;
     MONTHS.forEach(month => {
+        const acts   = getActs(month);
         const prefix = `2026-${String(month).padStart(2,'0')}-`;
         const seen   = new Set();
-        Object.entries(data).forEach(([k, acts]) => {
-            if (k.startsWith(prefix)) acts.forEach(a => seen.add(a));
+        Object.entries(data).forEach(([k, list]) => {
+            if (k.startsWith(prefix)) list.forEach(a => seen.add(a));
         });
-        const done = seen.size;
-        const pct  = Math.round(done / ACT_NAMES.length * 100);
-        totalDone += done;
-
+        const done  = acts.filter(a => seen.has(a.name)).length;
+        const total = acts.length;
+        totalDone     += done;
+        totalPossible += total;
+        const pct = total ? Math.round(done / total * 100) : 0;
         const bar  = document.getElementById(`month-bar-${month}`);
-        const text = document.getElementById(`month-pct-${month}`);
-        if (bar)  bar.style.width  = pct + '%';
-        if (text) text.textContent = `${done} of ${ACT_NAMES.length} planned`;
+        const txt  = document.getElementById(`month-pct-${month}`);
+        if (bar) bar.style.width  = pct + '%';
+        if (txt) txt.textContent  = `${done} of ${total} planned`;
     });
-
-    const pct    = totalPossible ? Math.round(totalDone / totalPossible * 100) : 0;
+    const pct = totalPossible ? Math.round(totalDone / totalPossible * 100) : 0;
     const gBar   = document.getElementById('global-bar');
     const gPct   = document.getElementById('global-pct');
     const gCount = document.getElementById('global-count');
     if (gBar)   gBar.style.width   = pct + '%';
     if (gPct)   gPct.textContent   = pct + '%';
     if (gCount) gCount.textContent = `${totalDone} of ${totalPossible} activities scheduled`;
-
     const cel = document.getElementById('celebration');
     if (cel) cel.classList.toggle('hidden', totalDone < totalPossible);
 }
 
-/* ── Init: restore calendar highlights, chips & progress ──────── */
+/* ── Emoji auto-suggest ────────────────────────────────── */
+const EMOJI_HINTS = [
+    [/rsm|math|algebra|calcul|geometr/i, '📐'],
+    [/kumon|homework|tutor|worksheet/i,  '📚'],
+    [/danc|ballet|jazz|hip.?hop/i,       '💃'],
+    [/shloka|puja|mantra|prayer|chant/i, '🙏'],
+    [/music|sing|choir|vocal/i,          '🎵'],
+    [/piano|keyboard/i,                  '🎹'],
+    [/guitar/i,  '🎸'], [/drum/i,   '🥁'], [/violin/i, '🎻'],
+    [/swim|pool/i, '🏊'], [/soccer|football/i, '⚽'],
+    [/basket.?ball/i, '🏀'], [/tennis/i, '🎾'],
+    [/art|draw|paint|craft/i, '🎨'], [/read|book/i, '📖'],
+    [/cook|bak|chef|recipe/i, '👩‍🍳'],
+    [/hike|trail|climb/i, '🥾'], [/camp|tent/i, '⛺'],
+    [/beach|ocean|surf/i, '🏖️'], [/run|jog/i, '🏃'],
+    [/bike|cycl/i, '🚴'], [/gym|lift|workout/i, '💪'],
+    [/yoga|meditat/i, '🧘'], [/code|program/i, '💻'],
+    [/write|journal|diary/i, '✏️'], [/movie|film/i, '🎬'],
+    [/game|gaming/i, '🎮'], [/science|lab/i, '🔬'],
+    [/chess/i, '♟️'], [/garden|plant/i, '🌱'],
+];
+function suggestEmoji(name) {
+    for (const [re, emoji] of EMOJI_HINTS) {
+        if (re.test(name)) return emoji;
+    }
+    return null;
+}
+
+/* ── Editor ────────────────────────────────────────────── */
+function editorRowHTML(uid, emoji, name) {
+    return `<div class="flex items-center gap-2" id="erow-${uid}">
+        <input id="eemoji-${uid}" type="text" value="${esc(emoji)}"
+               class="w-12 text-center text-xl border border-gray-200 rounded-lg px-1 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300"
+               maxlength="4" placeholder="✨" oninput="onEmojiInput(this)">
+        <input id="ename-${uid}" type="text" value="${esc(name)}"
+               class="flex-1 caveat text-xl border border-gray-200 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-300"
+               placeholder="Activity name"
+               oninput="onNameInput(this,document.getElementById('eemoji-${uid}'))">
+        <button onclick="this.closest('[id^=erow]').remove()"
+                class="text-gray-300 hover:text-red-400 hover:bg-red-50 transition w-8 h-8 flex items-center justify-center rounded-lg text-xl font-bold shrink-0">×</button>
+    </div>`;
+}
+
+function renderEditorRows(month) {
+    const c = document.getElementById(`editor-rows-${month}`);
+    if (!c) return;
+    c.innerHTML = getActs(month)
+        .map((act, i) => editorRowHTML(`${month}-${i}`, act.emoji || '✨', act.name))
+        .join('');
+}
+
+function openEditor(month) {
+    renderEditorRows(month);
+    document.getElementById(`modal-${month}`)?.classList.remove('hidden');
+}
+
+function closeEditor(month) {
+    document.getElementById(`modal-${month}`)?.classList.add('hidden');
+}
+
+function addEditorRow(month) {
+    const c = document.getElementById(`editor-rows-${month}`);
+    if (!c) return;
+    const uid = `${month}-${Date.now()}`;
+    const div = document.createElement('div');
+    div.innerHTML = editorRowHTML(uid, '✨', '');
+    c.appendChild(div.firstElementChild);
+    document.getElementById(`ename-${uid}`)?.focus();
+}
+
+function onEmojiInput(el) {
+    // if user clears the field, re-enable auto-suggest; otherwise lock it
+    if (el.value.trim()) el.dataset.userEdited = '1';
+    else                 delete el.dataset.userEdited;
+}
+
+function onNameInput(nameEl, emojiEl) {
+    if (!emojiEl || emojiEl.dataset.userEdited) return;
+    const s = suggestEmoji(nameEl.value);
+    if (s) emojiEl.value = s;
+}
+
+function saveEditor(month) {
+    const c = document.getElementById(`editor-rows-${month}`);
+    if (!c) return;
+
+    const newActs = [];
+    c.querySelectorAll('[id^="erow-"]').forEach(row => {
+        const uid   = row.id.slice(5);              // strip "erow-"
+        const name  = (document.getElementById(`ename-${uid}`)?.value || '').trim();
+        const emoji = (document.getElementById(`eemoji-${uid}`)?.value || '✨').trim();
+        if (name) newActs.push({ name, emoji });
+    });
+
+    // Remove checklist assignments for deleted activities
+    const removed = getActs(month).map(a => a.name)
+                        .filter(n => !newActs.some(a => a.name === n));
+    if (removed.length) {
+        const cdata  = load();
+        const prefix = `2026-${String(month).padStart(2,'0')}-`;
+        Object.entries(cdata).forEach(([k, list]) => {
+            if (!k.startsWith(prefix)) return;
+            cdata[k] = list.filter(a => !removed.includes(a));
+            if (!cdata[k].length) delete cdata[k];
+        });
+        persist(cdata);
+    }
+
+    setActs(month, newActs);
+    closeEditor(month);
+
+    const cdata = load();
+    renderPills(month, picked[month] ? cdata[picked[month]] || [] : []);
+    renderActivityRows(month);
+    renderChips(month, cdata);
+    refreshCalendar(month, cdata);
+    updateProgress(cdata);
+}
+
+/* ── Init ──────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', () => {
     const data = load();
     MONTHS.forEach(m => {
-        refreshCalendar(m, data);
+        renderPills(m);
+        renderActivityRows(m);
         renderChips(m, data);
+        refreshCalendar(m, data);
     });
     updateProgress(data);
 });
