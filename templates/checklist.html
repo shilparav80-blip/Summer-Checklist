@@ -25,10 +25,40 @@
     .ed-card    { animation: edSlide 0.18s ease; }
     @keyframes edFade  { from { opacity:0 } to { opacity:1 } }
     @keyframes edSlide { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:none } }
+
+    /* edge emojis */
+    .e { animation: efloat 3s ease-in-out infinite; line-height:1; }
+    @keyframes efloat {
+        0%,100% { transform: translateY(0)    rotate(0deg);  }
+        40%     { transform: translateY(-7px) rotate(-5deg); }
+        70%     { transform: translateY(-3px) rotate(4deg);  }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
+
+<!-- Fixed edge emojis — only on screens wide enough to have gutters beside the max-w-3xl content -->
+<div class="hidden lg:block fixed inset-0 pointer-events-none z-10 select-none" aria-hidden="true">
+    <!-- left column -->
+    <span class="e absolute text-2xl" style="left:14px;top:7%;animation-delay:0s;animation-duration:3.1s">🌊</span>
+    <span class="e absolute text-xl"  style="left:7px; top:19%;animation-delay:.6s;animation-duration:2.8s">🐚</span>
+    <span class="e absolute text-2xl" style="left:18px;top:31%;animation-delay:1.3s;animation-duration:3.4s">☀️</span>
+    <span class="e absolute text-lg"  style="left:9px; top:43%;animation-delay:.2s;animation-duration:2.6s">🍦</span>
+    <span class="e absolute text-xl"  style="left:16px;top:55%;animation-delay:1.0s;animation-duration:3.2s">🦀</span>
+    <span class="e absolute text-2xl" style="left:6px; top:67%;animation-delay:.5s;animation-duration:2.9s">🌻</span>
+    <span class="e absolute text-lg"  style="left:20px;top:79%;animation-delay:1.6s;animation-duration:3.5s">🌈</span>
+    <span class="e absolute text-xl"  style="left:11px;top:90%;animation-delay:.9s;animation-duration:3.0s">🐡</span>
+    <!-- right column -->
+    <span class="e absolute text-2xl" style="right:12px;top:12%;animation-delay:.4s;animation-duration:3.3s">🌴</span>
+    <span class="e absolute text-xl"  style="right:22px;top:24%;animation-delay:1.1s;animation-duration:2.7s">🌺</span>
+    <span class="e absolute text-2xl" style="right:8px; top:36%;animation-delay:.8s;animation-duration:3.6s">🦋</span>
+    <span class="e absolute text-lg"  style="right:18px;top:48%;animation-delay:.1s;animation-duration:2.5s">🍉</span>
+    <span class="e absolute text-xl"  style="right:10px;top:60%;animation-delay:1.4s;animation-duration:3.1s">🐠</span>
+    <span class="e absolute text-2xl" style="right:20px;top:72%;animation-delay:.7s;animation-duration:2.9s">⭐</span>
+    <span class="e absolute text-lg"  style="right:6px; top:83%;animation-delay:1.2s;animation-duration:3.4s">🏄</span>
+    <span class="e absolute text-xl"  style="right:15px;top:93%;animation-delay:.3s;animation-duration:3.0s">🌸</span>
+</div>
 
 <!-- Nav -->
 <nav class="sticky top-0 z-30 bg-[#FFFBF0]/90 backdrop-blur-sm border-b border-amber-100 px-5 py-3 flex items-center justify-between">
