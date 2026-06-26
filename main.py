@@ -388,7 +388,7 @@ PENALTY_RULES = [
 
 
 def default_profile_state() -> dict:
-    return {"tasks": None, "done": {}, "penalties": {}, "schedule": {}}
+    return {"tasks": None, "done": {}, "pending": {}, "penalties": {}, "schedule": {}}
 
 
 def _date_add_days(key: str, days: int) -> str:
@@ -502,6 +502,7 @@ async def save_profile(player_slug: str, state: dict) -> dict:
     cleaned_state = {
         "tasks": state.get("tasks"),
         "done": state.get("done") or {},
+        "pending": state.get("pending") or {},
         "penalties": state.get("penalties") or {},
         "schedule": state.get("schedule") or {},
     }
@@ -604,6 +605,28 @@ def clean_custom_tasks(tasks: list[dict]) -> list[dict]:
     return cleaned
 
 
+def pending_approvals_for_profile(player_slug: str, profile: dict) -> list[dict]:
+    state = profile.get("state") or default_profile_state()
+    tasks = state.get("tasks") or player_default_tasks(player_slug)
+    tasks_by_name = {task["name"]: task for task in tasks}
+    pending = state.get("pending") or {}
+    items: list[dict] = []
+    for key, names in sorted(pending.items()):
+        if not isinstance(names, list):
+            continue
+        for name in names:
+            task = tasks_by_name.get(name, {"name": name, "stars": 1, "frequency": "daily"})
+            items.append({
+                "player_slug": player_slug,
+                "player_name": profile.get("player_name") or PLAYERS[player_slug],
+                "date_key": key,
+                "task_name": name,
+                "stars": int(task.get("stars") or 1),
+                "frequency": task.get("frequency") or "daily",
+            })
+    return items
+
+
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
     if not request.session.get("authenticated"):
@@ -616,6 +639,55 @@ async def admin_page(request: Request):
         "player_defaults_js": json.dumps({
             slug: player_default_tasks(slug) for slug in PLAYERS
         }),
+    })
+
+
+@app.get("/api/admin/approvals")
+async def api_admin_approvals(request: Request):
+    require_admin_unlocked(request)
+    approvals: list[dict] = []
+    for slug in PLAYERS:
+        approvals.extend(pending_approvals_for_profile(slug, await load_profile(slug)))
+    return JSONResponse({"approvals": approvals})
+
+
+@app.post("/api/admin/players/{player_slug}/approvals")
+async def api_admin_update_approval(player_slug: str, request: Request):
+    require_admin_unlocked(request)
+    player_slug = player_slug.lower()
+    if player_slug not in PLAYERS:
+        raise HTTPException(status_code=404, detail="Player not found")
+    payload = await request.json()
+    action = str(payload.get("action", "")).strip().lower()
+    date_key = str(payload.get("date_key", "")).strip()
+    task_name = str(payload.get("task_name", "")).strip()
+    if action not in {"approve", "reject"} or not date_key or not task_name:
+        raise HTTPException(status_code=400, detail="Approval action is incomplete")
+
+    profile = await load_profile(player_slug)
+    state = profile["state"]
+    pending = state.get("pending") or {}
+    names = pending.get(date_key) or []
+    if task_name not in names:
+        raise HTTPException(status_code=404, detail="Pending task not found")
+
+    pending[date_key] = [name for name in names if name != task_name]
+    if not pending[date_key]:
+        del pending[date_key]
+    state["pending"] = pending
+
+    if action == "approve":
+        done = state.get("done") or {}
+        done.setdefault(date_key, [])
+        if task_name not in done[date_key]:
+            done[date_key].append(task_name)
+        state["done"] = done
+
+    saved = await save_profile(player_slug, state)
+    return JSONResponse({
+        "ok": True,
+        "total_stars": saved["total_stars"],
+        "leaderboard": await leaderboard(),
     })
 
 

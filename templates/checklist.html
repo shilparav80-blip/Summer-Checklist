@@ -229,6 +229,7 @@ const SERVER_STATE = JSON.parse(document.getElementById('state-data').textConten
 let leaderboardData = JSON.parse(document.getElementById('leaderboard-data').textContent);
 const TASK_KEY = 'daily_chores_tasks_v1';
 const DONE_KEY = 'daily_chores_done_v1';
+const PENDING_KEY = 'daily_chores_pending_v1';
 const PENALTY_KEY = 'daily_chores_penalties_v1';
 const SCHEDULE_KEY = 'daily_chores_schedule_v1';
 const PENALTIES = [
@@ -244,6 +245,7 @@ let saveTimer = null;
 let appState = {
     tasks: SERVER_STATE.tasks || loadJSON(scopedKey(TASK_KEY), null),
     done: SERVER_STATE.done || loadJSON(scopedKey(DONE_KEY), {}),
+    pending: SERVER_STATE.pending || loadJSON(scopedKey(PENDING_KEY), {}),
     penalties: SERVER_STATE.penalties || loadJSON(scopedKey(PENALTY_KEY), {}),
     schedule: SERVER_STATE.schedule || loadJSON(scopedKey(SCHEDULE_KEY), {})
 };
@@ -282,6 +284,7 @@ function changePlayer(name) {
 function persistLocalState() {
     saveJSON(scopedKey(TASK_KEY), appState.tasks);
     saveJSON(scopedKey(DONE_KEY), appState.done || {});
+    saveJSON(scopedKey(PENDING_KEY), appState.pending || {});
     saveJSON(scopedKey(PENALTY_KEY), appState.penalties || {});
     saveJSON(scopedKey(SCHEDULE_KEY), appState.schedule || {});
 }
@@ -384,6 +387,11 @@ function getDone() {
     return appState.done;
 }
 
+function getPending() {
+    appState.pending = appState.pending || {};
+    return appState.pending;
+}
+
 function getPenalties() {
     appState.penalties = appState.penalties || {};
     return appState.penalties;
@@ -404,19 +412,26 @@ function isDone(task, date, done = getDone()) {
     return bucket.includes(task.name);
 }
 
+function isPending(task, date, pending = getPending()) {
+    const bucket = pending[taskDoneKey(task, date)] || [];
+    return bucket.includes(task.name);
+}
+
 function toggleTask(name) {
     const tasks = getTasks();
     const task = tasks.find(item => item.name === name);
     if (!task) return;
 
-    const done = getDone();
+    if (isDone(task, selectedDate)) return;
+
+    const pending = getPending();
     const key = taskDoneKey(task, selectedDate);
-    if (!done[key]) done[key] = [];
-    const index = done[key].indexOf(name);
-    if (index >= 0) done[key].splice(index, 1);
-    else done[key].push(name);
-    if (!done[key].length) delete done[key];
-    appState.done = done;
+    if (!pending[key]) pending[key] = [];
+    const index = pending[key].indexOf(name);
+    if (index >= 0) pending[key].splice(index, 1);
+    else pending[key].push(name);
+    if (!pending[key].length) delete pending[key];
+    appState.pending = pending;
     queueServerSave();
     render();
 }
@@ -438,7 +453,9 @@ function togglePenalty(name) {
     render();
 }
 
-function taskRow(task, done) {
+function taskRow(task, status) {
+    const approved = status === 'approved';
+    const pending = status === 'pending';
     const stars = Number(task.stars || 1);
     const starText = stars === 1 ? '1 star' : `${stars} stars`;
     const icons = {
@@ -454,19 +471,19 @@ function taskRow(task, done) {
         thali: '&#127869;&#65039;'
     };
     const icon = icons[task.icon] || '&#10045;';
-    const status = done ? 'CLEAR' : esc(task.badge || 'TASK');
+    const badge = approved ? 'APPROVED' : pending ? 'PENDING' : esc(task.badge || 'TASK');
     const frequency = task.frequency === 'weekly' ? 'Weekly bonus quest' : 'Daily quest';
     return `<button type="button"
         onclick="toggleTask('${esc(task.name)}')"
-        class="task-row w-full text-left px-5 py-4 flex items-center gap-4 border-l-4 ${done ? 'bg-orange-50 border-orange-400' : 'bg-white border-transparent'}">
-        <span class="check-btn shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold ${done ? 'bg-orange-500 border-orange-500 text-white' : 'border-gray-300 text-transparent'}">&#10003;</span>
+        class="task-row w-full text-left px-5 py-4 flex items-center gap-4 border-l-4 ${approved ? 'bg-green-50 border-green-500' : pending ? 'bg-amber-50 border-amber-400' : 'bg-white border-transparent'}">
+        <span class="check-btn shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center font-bold ${approved ? 'bg-green-600 border-green-600 text-white' : pending ? 'bg-amber-400 border-amber-400 text-white' : 'border-gray-300 text-transparent'}">${pending ? '&#8943;' : '&#10003;'}</span>
         <span class="shrink-0 w-11 h-11 rounded-xl bg-amber-100 text-2xl flex items-center justify-center text-amber-700">${icon}</span>
-        <span class="shrink-0 min-w-14 rounded-lg bg-orange-100 px-2 py-1 text-center text-[11px] font-bold text-orange-700">${status}</span>
+        <span class="shrink-0 min-w-14 rounded-lg ${approved ? 'bg-green-100 text-green-700' : pending ? 'bg-amber-100 text-amber-700' : 'bg-orange-100 text-orange-700'} px-2 py-1 text-center text-[11px] font-bold">${badge}</span>
         <span class="min-w-0 flex-1">
-            <span class="block font-semibold ${done ? 'text-gray-400 line-through' : 'text-gray-800'}">${esc(task.name)}</span>
-            <span class="block text-xs text-gray-400">${frequency} &middot; ${starText}</span>
+            <span class="block font-semibold ${approved ? 'text-gray-400 line-through' : 'text-gray-800'}">${esc(task.name)}</span>
+            <span class="block text-xs text-gray-400">${frequency} &middot; ${pending ? 'waiting for parent approval' : starText}</span>
         </span>
-        <span class="text-amber-400 font-bold">${stars} &#9733;</span>
+        <span class="${approved ? 'text-green-600' : pending ? 'text-amber-500' : 'text-amber-400'} font-bold">${stars} &#9733;</span>
     </button>`;
 }
 
@@ -615,6 +632,12 @@ function scoreForDate(date, done, tasks, penalties = getPenalties()) {
     return Math.max(0, earnedStarsForDate(date, done, tasks) - penaltyStarsForDate(date, penalties));
 }
 
+function taskStatus(task, date, done = getDone(), pending = getPending()) {
+    if (isDone(task, date, done)) return 'approved';
+    if (isPending(task, date, pending)) return 'pending';
+    return 'open';
+}
+
 function totalStars(done, tasks, penalties) {
     const keys = new Set([...Object.keys(done), ...Object.keys(penalties)]);
     return [...keys].reduce((sum, key) => {
@@ -677,6 +700,7 @@ function renderLeaderboard() {
 function render() {
     const tasks = getTasks();
     const done = getDone();
+    const pending = getPending();
     const penalties = getPenalties();
     const daily = tasks.filter(task => task.frequency === 'daily');
     const weekly = tasks.filter(task => task.frequency === 'weekly');
@@ -689,17 +713,23 @@ function render() {
 
     const dailyDone = daily.filter(task => isDone(task, selectedDate, done)).length;
     const weeklyDone = weekly.filter(task => isDone(task, selectedDate, done)).length;
+    const dailyPending = daily.filter(task => isPending(task, selectedDate, pending)).length;
+    const weeklyPending = weekly.filter(task => isPending(task, selectedDate, pending)).length;
     const todayPenaltyStars = penaltyStarsForDate(selectedDate, penalties);
     const todayStars = scoreForDate(selectedDate, done, tasks, penalties);
     const start = weekStart(selectedDate);
     const weekStars = Array.from({ length: 7 }, (_, i) => scoreForDate(addDays(start, i), done, tasks, penalties))
         .reduce((sum, score) => sum + score, 0);
 
-    document.getElementById('daily-list').innerHTML = daily.map(task => taskRow(task, isDone(task, selectedDate, done))).join('');
-    document.getElementById('weekly-list').innerHTML = weekly.map(task => taskRow(task, isDone(task, selectedDate, done))).join('');
+    document.getElementById('daily-list').innerHTML = daily.map(task => taskRow(task, taskStatus(task, selectedDate, done, pending))).join('');
+    document.getElementById('weekly-list').innerHTML = weekly.map(task => taskRow(task, taskStatus(task, selectedDate, done, pending))).join('');
     document.getElementById('penalty-list').innerHTML = PENALTIES.map(penalty => penaltyRow(penalty, isPenaltyMarked(penalty, selectedDate, penalties))).join('');
-    document.getElementById('daily-count').textContent = `${dailyDone} / ${daily.length}`;
-    document.getElementById('weekly-count').textContent = `${weeklyDone} / ${weekly.length}`;
+    document.getElementById('daily-count').textContent = dailyPending
+        ? `${dailyDone} approved, ${dailyPending} pending`
+        : `${dailyDone} / ${daily.length}`;
+    document.getElementById('weekly-count').textContent = weeklyPending
+        ? `${weeklyDone} approved, ${weeklyPending} pending`
+        : `${weeklyDone} / ${weekly.length}`;
     document.getElementById('penalty-count').textContent = todayPenaltyStars ? `-${todayPenaltyStars} stars` : '0 stars';
     document.getElementById('today-stars').textContent = todayStars;
     document.getElementById('week-stars').textContent = weekStars;
@@ -712,7 +742,9 @@ function render() {
     document.getElementById('xp-fill').style.width = `${player.pct}%`;
     document.getElementById('today-progress').textContent = todayPenaltyStars
         ? `${dailyDone} of ${daily.length} daily quests cleared, ${todayPenaltyStars} stars reduced`
-        : `${dailyDone} of ${daily.length} daily quests cleared`;
+        : dailyPending
+            ? `${dailyDone} approved, ${dailyPending} waiting for approval`
+            : `${dailyDone} of ${daily.length} daily quests approved`;
 
     const currentStreak = streak(done, tasks);
     document.getElementById('streak-text').textContent = `${currentStreak} day${currentStreak === 1 ? '' : 's'} combo`;

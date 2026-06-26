@@ -1,7 +1,7 @@
 create table if not exists public.star_quest_profiles (
   player_slug text primary key,
   player_name text not null,
-  state jsonb not null default '{"tasks": null, "done": {}, "penalties": {}, "schedule": {}}'::jsonb,
+  state jsonb not null default '{"tasks": null, "done": {}, "pending": {}, "penalties": {}, "schedule": {}}'::jsonb,
   total_stars integer not null default 0,
   updated_at timestamptz not null default now()
 );

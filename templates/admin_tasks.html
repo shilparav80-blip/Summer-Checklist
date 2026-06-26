@@ -50,6 +50,19 @@
                 <div id="taskRows" class="mt-3 grid gap-3"></div>
             </section>
         </div>
+
+        <section class="mt-5 rounded-2xl border border-white/15 bg-[#fff8e7] p-4 shadow-xl">
+            <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <h2 class="text-2xl font-bold text-[#783524]">Star Approvals</h2>
+                    <p id="approvalStatus" class="mt-1 text-sm text-gray-500">Review completed chores before stars count.</p>
+                </div>
+                <button id="refreshApprovals" type="button" class="rounded-xl border border-[#e4b99e] px-4 py-2 text-sm font-semibold text-[#783524] hover:bg-[#fff1d1]">
+                    Refresh
+                </button>
+            </div>
+            <div id="approvalRows" class="grid gap-3"></div>
+        </section>
     </section>
 </main>
 
@@ -65,6 +78,8 @@
     const taskRows = document.getElementById("taskRows");
     const editorTitle = document.getElementById("editorTitle");
     const saveStatus = document.getElementById("saveStatus");
+    const approvalRows = document.getElementById("approvalRows");
+    const approvalStatus = document.getElementById("approvalStatus");
 
     function setStatus(message, tone = "muted") {
         saveStatus.textContent = message;
@@ -171,6 +186,72 @@
         setStatus("Saved. This child will see the new list on their quest page.");
     }
 
+    function formatApprovalDate(key) {
+        const [year, month, day] = key.split("-").map(Number);
+        return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+            weekday: "short",
+            month: "short",
+            day: "numeric",
+        });
+    }
+
+    function renderApprovals(items) {
+        if (!items.length) {
+            approvalRows.innerHTML = '<div class="rounded-xl border border-dashed border-[#e4b99e] bg-white/60 px-4 py-6 text-center text-sm text-gray-500">No chores are waiting for approval.</div>';
+            approvalStatus.textContent = "All caught up.";
+            return;
+        }
+        approvalStatus.textContent = `${items.length} chore${items.length === 1 ? "" : "s"} waiting for approval.`;
+        approvalRows.innerHTML = items.map((item, index) => `
+            <div class="rounded-xl border border-[#ead4bc] bg-white/70 p-4">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-wider text-[#c35a32]">${escapeAttr(item.player_name)} &middot; ${formatApprovalDate(item.date_key)}</p>
+                        <h3 class="mt-1 text-lg font-bold text-[#783524]">${escapeAttr(item.task_name)}</h3>
+                        <p class="mt-1 text-sm text-gray-500">${item.frequency === "weekly" ? "Weekly" : "Daily"} quest &middot; ${Number(item.stars || 1)} stars</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" data-index="${index}" data-action="reject" class="approval-action rounded-xl border border-red-200 px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50">Reject</button>
+                        <button type="button" data-index="${index}" data-action="approve" class="approval-action rounded-xl bg-[#2f7d5c] px-4 py-2 text-sm font-bold text-white hover:bg-[#246548]">Approve</button>
+                    </div>
+                </div>
+            </div>
+        `).join("");
+        document.querySelectorAll(".approval-action").forEach(button => {
+            button.addEventListener("click", () => updateApproval(items[Number(button.dataset.index)], button.dataset.action));
+        });
+    }
+
+    async function loadApprovals() {
+        approvalStatus.textContent = "Loading approvals...";
+        const response = await fetch("/api/admin/approvals");
+        if (!response.ok) {
+            approvalStatus.textContent = "Could not load approvals.";
+            approvalRows.innerHTML = "";
+            return;
+        }
+        const data = await response.json();
+        renderApprovals(data.approvals || []);
+    }
+
+    async function updateApproval(item, action) {
+        approvalStatus.textContent = action === "approve" ? "Approving..." : "Rejecting...";
+        const response = await fetch(`/api/admin/players/${item.player_slug}/approvals`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                action,
+                date_key: item.date_key,
+                task_name: item.task_name,
+            }),
+        });
+        if (!response.ok) {
+            approvalStatus.textContent = "Could not update approval.";
+            return;
+        }
+        await loadApprovals();
+    }
+
     document.getElementById("addTask").addEventListener("click", () => {
         currentTasks.push({ name: "", badge: "", icon: "lotus", frequency: "daily", stars: 2 });
         renderTasks();
@@ -184,8 +265,10 @@
     });
 
     document.getElementById("saveTasks").addEventListener("click", saveTasks);
+    document.getElementById("refreshApprovals").addEventListener("click", loadApprovals);
 
     renderPlayers();
     loadTasks();
+    loadApprovals();
 </script>
 {% endblock %}
