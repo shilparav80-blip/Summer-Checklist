@@ -84,7 +84,6 @@
                     <button type="button" onclick="goToday()" class="rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-orange-600">Today</button>
                     <button type="button" onclick="changeDay(1)" class="rounded-xl border border-orange-200 bg-white px-4 py-2 text-sm font-semibold text-orange-600 shadow-sm hover:bg-orange-50">Next</button>
                 </div>
-                <button id="done-logging-btn" type="button" onclick="doneLogging()" class="w-full md:w-auto rounded-xl bg-[#2f7d5c] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#246548]">Done logging</button>
             </div>
         </div>
     </section>
@@ -169,6 +168,16 @@
             <div id="penalty-count" class="text-sm font-bold text-red-500">0 stars</div>
         </div>
         <div id="penalty-list" class="divide-y divide-orange-50"></div>
+    </section>
+
+    <section class="bg-white rounded-2xl border border-orange-100 shadow-md p-5 mb-6">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+                <h2 class="font-bold text-gray-700">Finish the day</h2>
+                <p class="text-sm text-gray-400">Use this after all chores and screen-time notes are entered.</p>
+            </div>
+            <button id="done-logging-btn" type="button" onclick="doneLogging()" class="w-full md:w-auto rounded-xl bg-[#2f7d5c] px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-[#246548]">Done logging</button>
+        </div>
     </section>
 
     <section class="bg-white rounded-2xl border border-orange-100 shadow-md overflow-hidden mb-6">

@@ -632,6 +632,20 @@ def pending_approvals_for_profile(player_slug: str, profile: dict) -> list[dict]
     return items
 
 
+def locked_days_for_profile(player_slug: str, profile: dict) -> list[dict]:
+    state = profile.get("state") or default_profile_state()
+    locked = state.get("locked") or {}
+    return [
+        {
+            "player_slug": player_slug,
+            "player_name": profile.get("player_name") or PLAYERS[player_slug],
+            "date_key": key,
+        }
+        for key, value in sorted(locked.items())
+        if value
+    ]
+
+
 @app.get("/admin", response_class=HTMLResponse)
 async def admin_page(request: Request):
     if not request.session.get("authenticated"):
@@ -654,6 +668,39 @@ async def api_admin_approvals(request: Request):
     for slug in PLAYERS:
         approvals.extend(pending_approvals_for_profile(slug, await load_profile(slug)))
     return JSONResponse({"approvals": approvals})
+
+
+@app.get("/api/admin/locked-days")
+async def api_admin_locked_days(request: Request):
+    require_admin_unlocked(request)
+    locked_days: list[dict] = []
+    for slug in PLAYERS:
+        locked_days.extend(locked_days_for_profile(slug, await load_profile(slug)))
+    return JSONResponse({"locked_days": locked_days})
+
+
+@app.post("/api/admin/players/{player_slug}/locked-days")
+async def api_admin_update_locked_day(player_slug: str, request: Request):
+    require_admin_unlocked(request)
+    player_slug = player_slug.lower()
+    if player_slug not in PLAYERS:
+        raise HTTPException(status_code=404, detail="Player not found")
+    payload = await request.json()
+    action = str(payload.get("action", "")).strip().lower()
+    date_key = str(payload.get("date_key", "")).strip()
+    if action != "unlock" or not date_key:
+        raise HTTPException(status_code=400, detail="Locked day action is incomplete")
+
+    profile = await load_profile(player_slug)
+    state = profile["state"]
+    locked = state.get("locked") or {}
+    locked.pop(date_key, None)
+    state["locked"] = locked
+    saved = await save_profile(player_slug, state)
+    return JSONResponse({
+        "ok": True,
+        "locked": saved["state"].get("locked") or {},
+    })
 
 
 @app.post("/api/admin/players/{player_slug}/approvals")

@@ -63,6 +63,19 @@
             </div>
             <div id="approvalRows" class="grid gap-3"></div>
         </section>
+
+        <section class="mt-5 rounded-2xl border border-white/15 bg-[#fff8e7] p-4 shadow-xl">
+            <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <h2 class="text-2xl font-bold text-[#783524]">Locked Logging Days</h2>
+                    <p id="lockedStatus" class="mt-1 text-sm text-gray-500">Unlock a day if Done logging was tapped by mistake.</p>
+                </div>
+                <button id="refreshLocked" type="button" class="rounded-xl border border-[#e4b99e] px-4 py-2 text-sm font-semibold text-[#783524] hover:bg-[#fff1d1]">
+                    Refresh
+                </button>
+            </div>
+            <div id="lockedRows" class="grid gap-3"></div>
+        </section>
     </section>
 </main>
 
@@ -80,6 +93,8 @@
     const saveStatus = document.getElementById("saveStatus");
     const approvalRows = document.getElementById("approvalRows");
     const approvalStatus = document.getElementById("approvalStatus");
+    const lockedRows = document.getElementById("lockedRows");
+    const lockedStatus = document.getElementById("lockedStatus");
 
     function setStatus(message, tone = "muted") {
         saveStatus.textContent = message;
@@ -252,6 +267,58 @@
         await loadApprovals();
     }
 
+    function renderLockedDays(items) {
+        if (!items.length) {
+            lockedRows.innerHTML = '<div class="rounded-xl border border-dashed border-[#e4b99e] bg-white/60 px-4 py-6 text-center text-sm text-gray-500">No logging days are locked.</div>';
+            lockedStatus.textContent = "No locked days right now.";
+            return;
+        }
+        lockedStatus.textContent = `${items.length} locked day${items.length === 1 ? "" : "s"}.`;
+        lockedRows.innerHTML = items.map((item, index) => `
+            <div class="rounded-xl border border-[#ead4bc] bg-white/70 p-4">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-wider text-[#c35a32]">${escapeAttr(item.player_name)}</p>
+                        <h3 class="mt-1 text-lg font-bold text-[#783524]">${formatApprovalDate(item.date_key)}</h3>
+                    </div>
+                    <button type="button" data-index="${index}" class="locked-action rounded-xl bg-[#2f7d5c] px-4 py-2 text-sm font-bold text-white hover:bg-[#246548]">Unlock day</button>
+                </div>
+            </div>
+        `).join("");
+        document.querySelectorAll(".locked-action").forEach(button => {
+            button.addEventListener("click", () => unlockLockedDay(items[Number(button.dataset.index)]));
+        });
+    }
+
+    async function loadLockedDays() {
+        lockedStatus.textContent = "Loading locked days...";
+        const response = await fetch("/api/admin/locked-days");
+        if (!response.ok) {
+            lockedStatus.textContent = "Could not load locked days.";
+            lockedRows.innerHTML = "";
+            return;
+        }
+        const data = await response.json();
+        renderLockedDays(data.locked_days || []);
+    }
+
+    async function unlockLockedDay(item) {
+        lockedStatus.textContent = "Unlocking day...";
+        const response = await fetch(`/api/admin/players/${item.player_slug}/locked-days`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                action: "unlock",
+                date_key: item.date_key,
+            }),
+        });
+        if (!response.ok) {
+            lockedStatus.textContent = "Could not unlock this day.";
+            return;
+        }
+        await loadLockedDays();
+    }
+
     document.getElementById("addTask").addEventListener("click", () => {
         currentTasks.push({ name: "", badge: "", icon: "lotus", frequency: "daily", stars: 2 });
         renderTasks();
@@ -266,9 +333,11 @@
 
     document.getElementById("saveTasks").addEventListener("click", saveTasks);
     document.getElementById("refreshApprovals").addEventListener("click", loadApprovals);
+    document.getElementById("refreshLocked").addEventListener("click", loadLockedDays);
 
     renderPlayers();
     loadTasks();
     loadApprovals();
+    loadLockedDays();
 </script>
 {% endblock %}
