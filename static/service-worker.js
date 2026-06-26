@@ -1,11 +1,17 @@
-const CACHE_NAME = 'star-quest-v1';
+const CACHE_NAME = 'star-quest-v2';
 const APP_SHELL = [
   '/',
   '/login',
-  '/checklist',
   '/manifest.webmanifest',
   '/app-icon.svg'
 ];
+
+function shouldBypassCache(request) {
+  const url = new URL(request.url);
+  return url.pathname.startsWith('/api/')
+    || url.pathname.startsWith('/admin')
+    || url.pathname.startsWith('/checklist');
+}
 
 self.addEventListener('install', event => {
   event.waitUntil(
@@ -25,6 +31,10 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+  if (shouldBypassCache(event.request)) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
   event.respondWith(
     fetch(event.request)
       .then(response => {

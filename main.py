@@ -67,9 +67,11 @@ templates.env.cache = None
 def render_template(request: Request, name: str, context: dict, status_code: int = 200):
     context = {"request": request, **context}
     try:
-        return templates.TemplateResponse(request, name, context, status_code=status_code)
+        response = templates.TemplateResponse(request, name, context, status_code=status_code)
     except TypeError:
-        return templates.TemplateResponse(name, context, status_code=status_code)
+        response = templates.TemplateResponse(name, context, status_code=status_code)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 # Vercel's project root is read-only; /tmp is writable (ephemeral between cold starts).
 # Locally we keep data/ as before.
