@@ -374,6 +374,7 @@ PLAYERS = {
     "aarav": "Aarav",
     "arjun": "Arjun",
     "adi": "Adi",
+    "ichi": "Ichi",
 }
 
 PLAYER_PINS = {
@@ -381,6 +382,7 @@ PLAYER_PINS = {
     "aarav": os.getenv("AARAV_PIN", "2222"),
     "arjun": os.getenv("ARJUN_PIN", "3333"),
     "adi": os.getenv("ADI_PIN", "4444"),
+    "ichi": os.getenv("ICHI_PIN", "5555"),
 }
 
 PENALTY_RULES = [
