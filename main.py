@@ -466,6 +466,8 @@ async def _supabase_request(method: str, path: str, json_body: Optional[dict] = 
             return None
         if response.content:
             return response.json()
+        if method.upper() in {"POST", "PATCH", "PUT", "DELETE"}:
+            return True
         return None
 
 
