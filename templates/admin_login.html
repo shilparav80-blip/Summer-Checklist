@@ -17,12 +17,13 @@
 
         <form method="post" action="/admin/unlock">
             <label class="mb-2 block text-xs font-semibold uppercase tracking-wider text-gray-500">
-                Parent password
+                Parent PIN
             </label>
             <input
                 type="password"
+                inputmode="numeric"
                 name="password"
-                placeholder="Enter parent password"
+                placeholder="Enter parent PIN"
                 required
                 autofocus
                 class="mb-5 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm text-gray-700 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-orange-300"

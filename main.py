@@ -20,6 +20,7 @@ load_dotenv()
 
 PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
 DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD", "summer2024")
+PARENT_PIN = os.getenv("PARENT_PIN", "9999")
 SECRET_KEY = os.getenv("SECRET_KEY", "summer-checklist-dev-key-change-me")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
@@ -748,11 +749,11 @@ async def api_admin_update_approval(player_slug: str, request: Request):
 @app.post("/admin/unlock", response_class=HTMLResponse)
 async def unlock_admin(request: Request, password: str = Form(...)):
     require_auth(request)
-    if hmac.compare_digest(password.strip(), DASHBOARD_PASSWORD):
+    if hmac.compare_digest(password.strip(), PARENT_PIN):
         request.session["admin_unlocked"] = True
         return RedirectResponse("/admin", status_code=302)
     return render_template(request, "admin_login.html", {
-        "error": "Incorrect parent password",
+        "error": "Incorrect parent PIN",
     }, status_code=401)
 
 
