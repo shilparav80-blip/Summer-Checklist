@@ -227,6 +227,7 @@
 const DEFAULT_TASKS = JSON.parse(document.getElementById('task-data').textContent);
 const PLAYER_MAP = JSON.parse(document.getElementById('player-data').textContent);
 const SERVER_STATE = JSON.parse(document.getElementById('state-data').textContent);
+const HAS_SERVER_TASKS = Array.isArray(SERVER_STATE.tasks);
 let leaderboardData = JSON.parse(document.getElementById('leaderboard-data').textContent);
 const TASK_KEY = 'daily_chores_tasks_v1';
 const DONE_KEY = 'daily_chores_done_v1';
@@ -354,6 +355,9 @@ function getTasks() {
         appState.tasks = fresh;
         queueServerSave();
         return fresh;
+    }
+    if (HAS_SERVER_TASKS) {
+        return stored;
     }
     const defaultsByName = new Map(DEFAULT_TASKS.map(task => [task.name, task]));
     let changed = false;
