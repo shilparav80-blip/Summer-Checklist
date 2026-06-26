@@ -55,7 +55,10 @@
 <nav class="sticky top-0 z-30 bg-[#fff8e7]/95 backdrop-blur-sm border-b border-white/40 px-5 py-3 flex items-center justify-between shadow-sm">
     <a href="/" class="text-[#9f4d35] hover:text-[#783524] text-sm font-semibold transition">Home</a>
     <span class="pacifico text-xl text-[#9f4d35]">Daily Chores</span>
-    <a href="/logout" class="text-xs text-[#9f4d35]/70 hover:text-[#783524] transition">Logout</a>
+    <div class="flex items-center gap-3">
+        <a href="/checklist/{{ player_slug }}/lock" class="text-xs font-semibold text-[#9f4d35]/80 hover:text-[#783524] transition">Lock profile</a>
+        <a href="/logout" class="text-xs text-[#9f4d35]/70 hover:text-[#783524] transition">Logout</a>
+    </div>
 </nav>
 
 <main class="max-w-4xl mx-auto px-4 py-8">

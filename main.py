@@ -798,6 +798,16 @@ async def unlock_child_profile(request: Request, player_slug: str, pin: str = Fo
     }, status_code=401)
 
 
+@app.get("/checklist/{player_slug}/lock")
+async def lock_child_profile(request: Request, player_slug: str):
+    require_auth(request)
+    player_slug = player_slug.lower()
+    if player_slug not in PLAYERS:
+        return RedirectResponse("/checklist/aretha", status_code=302)
+    request.session.pop(f"player_unlocked:{player_slug}", None)
+    return RedirectResponse(f"/checklist/{player_slug}", status_code=302)
+
+
 @app.get("/api/leaderboard")
 async def api_leaderboard(request: Request):
     require_auth(request)
