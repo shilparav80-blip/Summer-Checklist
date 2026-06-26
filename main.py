@@ -388,7 +388,7 @@ PENALTY_RULES = [
 
 
 def default_profile_state() -> dict:
-    return {"tasks": None, "done": {}, "pending": {}, "penalties": {}, "schedule": {}}
+    return {"tasks": None, "done": {}, "pending": {}, "penalties": {}, "schedule": {}, "locked": {}}
 
 
 def _date_add_days(key: str, days: int) -> str:
@@ -505,6 +505,7 @@ async def save_profile(player_slug: str, state: dict) -> dict:
         "pending": state.get("pending") or {},
         "penalties": state.get("penalties") or {},
         "schedule": state.get("schedule") or {},
+        "locked": state.get("locked") or {},
     }
     total_stars = compute_total_stars(cleaned_state)
     profile = {
