@@ -54,6 +54,34 @@
         <section class="mt-5 rounded-2xl border border-white/15 bg-[#fff8e7] p-4 shadow-xl">
             <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
+                    <h2 id="penaltyTitle" class="text-2xl font-bold text-[#783524]">Penalties</h2>
+                    <p id="penaltyStatus" class="mt-1 text-sm text-gray-500">Add negative-point items for the selected child.</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button id="addPenalty" type="button" class="rounded-xl bg-[#2f7d5c] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#246548]">
+                        Add Penalty
+                    </button>
+                    <button id="resetPenalties" type="button" class="rounded-xl border border-[#e4b99e] px-4 py-2 text-sm font-semibold text-[#783524] hover:bg-[#fff1d1]">
+                        Reset Defaults
+                    </button>
+                    <button id="savePenalties" type="button" class="rounded-xl bg-[#c35a32] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#a94727]">
+                        Save
+                    </button>
+                </div>
+            </div>
+
+            <div class="hidden border-b border-[#ead4bc] pb-2 text-xs font-bold uppercase tracking-wider text-gray-500 md:grid md:grid-cols-[1.5fr_0.65fr_0.7fr_42px] md:gap-2">
+                <div>Penalty</div>
+                <div>Badge</div>
+                <div>Points Deducted</div>
+                <div></div>
+            </div>
+            <div id="penaltyRows" class="mt-3 grid gap-3"></div>
+        </section>
+
+        <section class="mt-5 rounded-2xl border border-white/15 bg-[#fff8e7] p-4 shadow-xl">
+            <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
                     <h2 class="text-2xl font-bold text-[#783524]">Star Approvals</h2>
                     <p id="approvalStatus" class="mt-1 text-sm text-gray-500">Review completed chores before stars count.</p>
                 </div>
@@ -82,15 +110,20 @@
 <script>
     const players = {{ players_js | safe }};
     const defaultTasks = {{ default_tasks_js | safe }};
+    const defaultPenalties = {{ default_penalties_js | safe }};
     const playerDefaults = {{ player_defaults_js | safe }};
     const iconOptions = ["book", "diya", "ghungroo", "lotus", "mandala", "om", "raga", "rangoli", "tabla", "thali"];
     let activeSlug = Object.keys(players)[0];
     let currentTasks = [];
+    let currentPenalties = [];
 
     const playerTabs = document.getElementById("playerTabs");
     const taskRows = document.getElementById("taskRows");
     const editorTitle = document.getElementById("editorTitle");
     const saveStatus = document.getElementById("saveStatus");
+    const penaltyRows = document.getElementById("penaltyRows");
+    const penaltyTitle = document.getElementById("penaltyTitle");
+    const penaltyStatus = document.getElementById("penaltyStatus");
     const approvalRows = document.getElementById("approvalRows");
     const approvalStatus = document.getElementById("approvalStatus");
     const lockedRows = document.getElementById("lockedRows");
@@ -114,6 +147,7 @@
                 activeSlug = slug;
                 renderPlayers();
                 loadTasks();
+                loadPenalties();
             });
             playerTabs.appendChild(button);
         });
@@ -154,6 +188,37 @@
         currentTasks.forEach((task, index) => taskRows.appendChild(taskRow(task, index)));
     }
 
+    function setPenaltyStatus(message, tone = "muted") {
+        penaltyStatus.textContent = message;
+        penaltyStatus.className = tone === "error" ? "mt-1 text-sm text-red-600" : "mt-1 text-sm text-gray-500";
+    }
+
+    function penaltyRow(rule, index) {
+        const wrapper = document.createElement("div");
+        wrapper.className = "grid gap-2 rounded-xl border border-[#ead4bc] bg-white/65 p-3 md:grid-cols-[1.5fr_0.65fr_0.7fr_42px] md:items-center";
+        wrapper.innerHTML = `
+            <input aria-label="Penalty name" value="${escapeAttr(rule.name || "")}" class="rounded-lg border border-[#ead4bc] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300">
+            <input aria-label="Badge" value="${escapeAttr(rule.badge || "")}" maxlength="12" class="rounded-lg border border-[#ead4bc] px-3 py-2 text-sm uppercase focus:outline-none focus:ring-2 focus:ring-orange-300">
+            <input aria-label="Points deducted" type="number" min="1" max="100" value="${Number(rule.stars || 1)}" class="rounded-lg border border-[#ead4bc] px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300">
+            <button type="button" aria-label="Remove penalty" class="h-10 rounded-lg border border-red-200 text-lg font-bold text-red-500 hover:bg-red-50">&times;</button>
+        `;
+        const [nameInput, badgeInput, starsInput, removeButton] = Array.from(wrapper.children);
+        nameInput.addEventListener("input", () => currentPenalties[index].name = nameInput.value);
+        badgeInput.addEventListener("input", () => currentPenalties[index].badge = badgeInput.value.toUpperCase());
+        starsInput.addEventListener("input", () => currentPenalties[index].stars = starsInput.value);
+        removeButton.addEventListener("click", () => {
+            currentPenalties.splice(index, 1);
+            renderPenalties();
+        });
+        return wrapper;
+    }
+
+    function renderPenalties() {
+        penaltyTitle.textContent = `${players[activeSlug]}'s penalties`;
+        penaltyRows.innerHTML = "";
+        currentPenalties.forEach((rule, index) => penaltyRows.appendChild(penaltyRow(rule, index)));
+    }
+
     function escapeAttr(value) {
         return String(value).replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
     }
@@ -169,6 +234,19 @@
         currentTasks = data.tasks.map(task => ({ ...task }));
         renderTasks();
         setStatus(`Editing ${data.player_name}'s quest list.`);
+    }
+
+    async function loadPenalties() {
+        setPenaltyStatus("Loading penalties...");
+        const response = await fetch(`/api/admin/players/${activeSlug}/penalty-rules`);
+        if (!response.ok) {
+            setPenaltyStatus("Could not load penalties. Please try again.", "error");
+            return;
+        }
+        const data = await response.json();
+        currentPenalties = data.penalty_rules.map(rule => ({ ...rule }));
+        renderPenalties();
+        setPenaltyStatus(`Editing ${data.player_name}'s negative-point list.`);
     }
 
     async function saveTasks() {
@@ -199,6 +277,34 @@
         currentTasks = data.tasks.map(task => ({ ...task }));
         renderTasks();
         setStatus("Saved. This child will see the new list on their quest page.");
+    }
+
+    async function savePenalties() {
+        const penaltyRules = currentPenalties
+            .map(rule => ({
+                name: String(rule.name || "").trim(),
+                badge: String(rule.badge || "").trim().toUpperCase(),
+                stars: Number(rule.stars || 1),
+            }))
+            .filter(rule => rule.name);
+        if (!penaltyRules.length) {
+            setPenaltyStatus("Add at least one penalty before saving.", "error");
+            return;
+        }
+        setPenaltyStatus("Saving...");
+        const response = await fetch(`/api/admin/players/${activeSlug}/penalty-rules`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ penalty_rules: penaltyRules }),
+        });
+        if (!response.ok) {
+            setPenaltyStatus("Could not save penalties. Please try again.", "error");
+            return;
+        }
+        const data = await response.json();
+        currentPenalties = data.penalty_rules.map(rule => ({ ...rule }));
+        renderPenalties();
+        setPenaltyStatus("Saved. This child will see the updated penalty list.");
     }
 
     function formatApprovalDate(key) {
@@ -332,11 +438,22 @@
     });
 
     document.getElementById("saveTasks").addEventListener("click", saveTasks);
+    document.getElementById("addPenalty").addEventListener("click", () => {
+        currentPenalties.push({ name: "", badge: "", stars: 10 });
+        renderPenalties();
+    });
+    document.getElementById("resetPenalties").addEventListener("click", () => {
+        currentPenalties = defaultPenalties.map(rule => ({ ...rule }));
+        renderPenalties();
+        setPenaltyStatus("Defaults are ready. Press Save to apply them.");
+    });
+    document.getElementById("savePenalties").addEventListener("click", savePenalties);
     document.getElementById("refreshApprovals").addEventListener("click", loadApprovals);
     document.getElementById("refreshLocked").addEventListener("click", loadLockedDays);
 
     renderPlayers();
     loadTasks();
+    loadPenalties();
     loadApprovals();
     loadLockedDays();
 </script>

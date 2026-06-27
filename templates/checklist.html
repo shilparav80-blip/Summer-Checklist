@@ -42,6 +42,7 @@
 
 {% block content %}
 <script type="application/json" id="task-data">{{ activities_js | safe }}</script>
+<script type="application/json" id="penalty-rule-data">{{ penalty_rules_js | safe }}</script>
 <script type="application/json" id="player-data">{{ players_js | safe }}</script>
 <script type="application/json" id="state-data">{{ state_js | safe }}</script>
 <script type="application/json" id="leaderboard-data">{{ leaderboard_js | safe }}</script>
@@ -238,6 +239,7 @@
 
 <script>
 const DEFAULT_TASKS = JSON.parse(document.getElementById('task-data').textContent);
+const PENALTIES = JSON.parse(document.getElementById('penalty-rule-data').textContent);
 const PLAYER_MAP = JSON.parse(document.getElementById('player-data').textContent);
 const SERVER_STATE = JSON.parse(document.getElementById('state-data').textContent);
 const HAS_SERVER_TASKS = Array.isArray(SERVER_STATE.tasks);
@@ -248,10 +250,6 @@ const PENDING_KEY = 'daily_chores_pending_v1';
 const PENALTY_KEY = 'daily_chores_penalties_v1';
 const SCHEDULE_KEY = 'daily_chores_schedule_v1';
 const LOCKED_KEY = 'daily_chores_locked_v1';
-const PENALTIES = [
-    { name: 'iPad watched for more than 1 hour', badge: 'IPAD', stars: 5 },
-    { name: 'TV watched for more than 1 hour', badge: 'TV', stars: 5 }
-];
 let selectedDate = new Date();
 let selectedScheduleDate = new Date();
 let visibleScheduleMonth = new Date(selectedScheduleDate.getFullYear(), selectedScheduleDate.getMonth(), 1);

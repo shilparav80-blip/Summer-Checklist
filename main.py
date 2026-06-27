@@ -387,13 +387,21 @@ PLAYER_PINS = {
 }
 
 PENALTY_RULES = [
-    {"name": "iPad watched for more than 1 hour", "stars": 5},
-    {"name": "TV watched for more than 1 hour", "stars": 5},
+    {"name": "iPad watched for more than 1 hour", "badge": "IPAD", "stars": 5},
+    {"name": "TV watched for more than 1 hour", "badge": "TV", "stars": 5},
 ]
 
 
 def default_profile_state() -> dict:
-    return {"tasks": None, "done": {}, "pending": {}, "penalties": {}, "schedule": {}, "locked": {}}
+    return {
+        "tasks": None,
+        "penalty_rules": None,
+        "done": {},
+        "pending": {},
+        "penalties": {},
+        "schedule": {},
+        "locked": {},
+    }
 
 
 def _date_add_days(key: str, days: int) -> str:
@@ -413,6 +421,7 @@ def _week_start_key(key: str) -> str:
 
 def compute_total_stars(state: dict) -> int:
     tasks = state.get("tasks") or CHECKLIST_ACTIVITIES
+    penalty_rules = state.get("penalty_rules") or PENALTY_RULES
     done = state.get("done") or {}
     penalties = state.get("penalties") or {}
     all_keys = set(done) | set(penalties)
@@ -423,7 +432,7 @@ def compute_total_stars(state: dict) -> int:
 
     def penalty_stars(key: str) -> int:
         marked = penalties.get(key) or []
-        return sum(int(rule["stars"]) for rule in PENALTY_RULES if rule["name"] in marked)
+        return sum(int(rule["stars"]) for rule in penalty_rules if rule["name"] in marked)
 
     total = 0
     for key in all_keys:
@@ -508,6 +517,7 @@ async def save_profile(player_slug: str, state: dict) -> dict:
     state = apply_player_task_rules(player_slug, state)
     cleaned_state = {
         "tasks": state.get("tasks"),
+        "penalty_rules": state.get("penalty_rules"),
         "done": state.get("done") or {},
         "pending": state.get("pending") or {},
         "penalties": state.get("penalties") or {},
@@ -613,6 +623,29 @@ def clean_custom_tasks(tasks: list[dict]) -> list[dict]:
     return cleaned
 
 
+def clean_penalty_rules(rules: list[dict]) -> list[dict]:
+    if not isinstance(rules, list):
+        return []
+    cleaned: list[dict] = []
+    for rule in rules[:30]:
+        if not isinstance(rule, dict):
+            continue
+        name = str(rule.get("name", "")).strip()
+        if not name:
+            continue
+        badge = str(rule.get("badge", "")).strip().upper()[:12] or name[:8].upper()
+        try:
+            stars = int(rule.get("stars", 1))
+        except (TypeError, ValueError):
+            stars = 1
+        cleaned.append({
+            "name": name,
+            "badge": badge,
+            "stars": max(1, min(stars, 100)),
+        })
+    return cleaned
+
+
 def pending_approvals_for_profile(player_slug: str, profile: dict) -> list[dict]:
     state = profile.get("state") or default_profile_state()
     tasks = state.get("tasks") or player_default_tasks(player_slug)
@@ -658,6 +691,7 @@ async def admin_page(request: Request):
     return render_template(request, "admin_tasks.html", {
         "players_js": json.dumps(PLAYERS),
         "default_tasks_js": json.dumps(CHECKLIST_ACTIVITIES),
+        "default_penalties_js": json.dumps(PENALTY_RULES),
         "player_defaults_js": json.dumps({
             slug: player_default_tasks(slug) for slug in PLAYERS
         }),
@@ -793,6 +827,42 @@ async def api_admin_save_player_tasks(player_slug: str, request: Request):
     })
 
 
+@app.get("/api/admin/players/{player_slug}/penalty-rules")
+async def api_admin_player_penalty_rules(player_slug: str, request: Request):
+    require_admin_unlocked(request)
+    player_slug = player_slug.lower()
+    player_name = PLAYERS.get(player_slug)
+    if not player_name:
+        raise HTTPException(status_code=404, detail="Player not found")
+    profile = await load_profile(player_slug)
+    return JSONResponse({
+        "player_slug": player_slug,
+        "player_name": player_name,
+        "penalty_rules": profile["state"].get("penalty_rules") or PENALTY_RULES,
+    })
+
+
+@app.post("/api/admin/players/{player_slug}/penalty-rules")
+async def api_admin_save_player_penalty_rules(player_slug: str, request: Request):
+    require_admin_unlocked(request)
+    player_slug = player_slug.lower()
+    if player_slug not in PLAYERS:
+        raise HTTPException(status_code=404, detail="Player not found")
+    payload = await request.json()
+    penalty_rules = clean_penalty_rules(payload.get("penalty_rules") or [])
+    if not penalty_rules:
+        raise HTTPException(status_code=400, detail="Add at least one penalty")
+    profile = await load_profile(player_slug)
+    state = profile["state"]
+    state["penalty_rules"] = penalty_rules
+    saved = await save_profile(player_slug, state)
+    return JSONResponse({
+        "ok": True,
+        "penalty_rules": saved["state"].get("penalty_rules") or PENALTY_RULES,
+        "total_stars": saved["total_stars"],
+    })
+
+
 @app.get("/checklist", response_class=HTMLResponse)
 async def checklist_page(request: Request):
     return await checklist_player_page(request, "aretha")
@@ -823,6 +893,7 @@ async def checklist_player_page(request: Request, player_slug: str):
         "months": months,
         "activities": player_default_tasks(player_slug),
         "activities_js": json.dumps(player_default_tasks(player_slug)),
+        "penalty_rules_js": json.dumps(profile["state"].get("penalty_rules") or PENALTY_RULES),
         "player_name": player_name,
         "player_slug": player_slug,
         "players_js": json.dumps(PLAYERS),
